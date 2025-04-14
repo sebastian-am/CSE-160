@@ -124,7 +124,8 @@ function addActionForHtmlUI() {
   document.getElementById("gameButton").onclick = function() {
     g_shapeList = [];
     renderAllShapes();
-    document.getElementById("referenceImage").style.display = "block";
+    
+    document.getElementById("referenceImage").style.display = "none";
   
     waitingToStart = true;
     catSpeed = 0;
