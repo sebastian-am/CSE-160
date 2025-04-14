@@ -1,0 +1,92 @@
+<!-- 
+Sebastian Morgese
+smorgese@ucsc.edu
+
+Notes to Grader:
+ - I've include a dropdown menu at the bottom of the page that links to external sources I've used for the assignment.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Assignment 2</title>
+</head>
+
+<body onload="main()">
+  <div style="display: flex; gap: 20px;">
+    <!-- Canvas -->
+    <canvas id="webgl" width="400" height="400">
+      Please use a browser that supports "canvas"
+    </canvas>
+  
+    <!-- Reference Image (initially hidden) -->
+    <img id="referenceImage" src="../img/drawing.jpeg" style="width: 400px; height: 400px; display: none;">
+  </div>
+
+  <!-- Controls -->
+  <section>
+    <p><button type="button" id="clearButton">Clear</button></p>
+
+    <strong>Shape:</strong>
+    <p>
+      <button type="button" id="pointButton">Point</button>
+      <button type="button" id="triangleButton">Triangle</button>
+      <button type="button" id="circleButton">Circle</button>
+    </p>
+
+    <strong>Specifications:</strong>
+    <p>
+      Color:<br>
+      Red <input type="range" min="0" max="255" value="0" class="slider" id="redSlide" />
+      Green <input type="range" min="0" max="255" value="0" class="slider" id="greenSlide" />
+      Blue <input type="range" min="0" max="255" value="0" class="slider" id="blueSlide" />
+    </p>
+
+    <p>
+      Shape Size:
+      <input type="range" min="0" max="100" value="20" class="slider" id="sizeSlide" />
+    </p>
+
+    <p>
+      Segment Count (Circle):
+      <input type="range" min="3" max="32" value="10" class="slider" id="segmentSlide" />
+    </p>
+  </section>
+  
+  <section>
+    <strong>Extras:</strong>
+    <p>
+      <button type="button" id="drawButton">Draw a Picture</button>
+      <button type="button" id="gameButton">Start Game</button>
+    </p>
+  </section>
+
+  <!-- External Sources Dropdown -->
+  <section class="bottom">
+    <label for="sources"><strong>External Sources:</strong></label>
+    <select id="sources" onchange="if(this.value) window.open(this.value)">
+      <option value=""></option>
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame">
+        [link] MDN - requestAnimationFrame
+      </option>
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect">
+        [link] MDN - getBoundingClientRect
+      </option>
+      <option value="">
+        [info] ChatGPT - Helped explain how to structure a basic game loop
+      </option>
+    </select>
+  </section>
+
+  <!-- Scripts -->
+  <script src="../lib/webgl-utils.js"></script>
+  <script src="../lib/webgl-debug.js"></script>
+  <script src="../lib/cuon-utils.js"></script>
+  <script src="triangles.js"></script>
+  <script src="circles.js"></script>
+  <script src="points.js"></script>
+  <script src="asg1.js"></script>
+  <script src="apple.js"></script>
+  <script src="cat.js"></script>
+</body>
+</html>
