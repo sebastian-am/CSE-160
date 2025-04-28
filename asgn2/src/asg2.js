@@ -35,7 +35,16 @@ var FSHADER_SOURCE = `
 
 /** Animation Controls **/
 /** @type {number} */ let g_globalAngle = 0;
-/** @type {boolean} */ let g_AnimationOn = false;
+/** @type {boolean} */ let g_animationOn = false;
+/** @type {boolean} */ let g_pokeAnimation = false;
+/** @type {boolean} */ let g_spinMode = false;
+/** @type {number} */ let g_totalSpin = 720;
+/** @type {number} */ let g_baseTentacleAngle = 0;
+/** @type {number} */ let g_secondTentacleAngle = 0;
+/** @type {number} */ let g_thirdTentacleAngle = 0;
+/** @type {number} */let g_tipTentacleAngle = 0;
+/** @type {number} */ let g_spiralSpin = 0;
+
 
 /** Mouse Control **/
 /** @type {boolean} */ let g_mouseDown = false;
@@ -47,7 +56,10 @@ var FSHADER_SOURCE = `
 /** Timing Variables **/
 /** @type {number} */ let g_startTime = performance.now() / 1000;
 /** @type {number} */ let g_seconds = performance.now()/1000.0-g_startTime; 
+/** @type {number} */ let g_spiralStartTime = 0;
+/** @type {number} */ let g_normalBobHeight = 0;
 /** @type {number} */ let g_bobHeight = 0;
+/** @type {number} */ let g_normalTiltAngle = 0;
 /** @type {number} */ let g_tiltAngle = 0;
 /** @type {number[]} */ let g_waveAngles = [];
 /** @type {number} */ let g_segmentCount = 4;
@@ -147,11 +159,21 @@ function connectVariablesToGLSL() {
 
 function addActionForHtmlUI() {
   // Part Slider Events
-  document.getElementById("yellowSlide").addEventListener("input", function() {
-    g_yellowAngle = this.value; renderScene();
+  document.getElementById("baseTentacleSlide").addEventListener("input", function() {
+    g_baseTentacleAngle = this.value;
+    renderScene();
   });
-  document.getElementById("magentaSlide").addEventListener("input", function() {
-    g_magentaAngle = this.value; renderScene();
+  document.getElementById("secondTentacleSlide").addEventListener("input", function() {
+    g_secondTentacleAngle = this.value;
+    renderScene();
+  });
+  document.getElementById("thirdTentacleSlide").addEventListener("input", function() {
+    g_thirdTentacleAngle = this.value;
+    renderScene();
+  });
+  document.getElementById("tipTentacleSlide").addEventListener("input", function() {
+    g_tipTentacleAngle = this.value;
+    renderScene();
   });
 
   // Global Angle Slider Events
@@ -161,11 +183,18 @@ function addActionForHtmlUI() {
 
   // Animation Button Event
   document.getElementById("animationOnButton").onclick = function() { 
-    g_AnimationOn = true;
+    g_animationOn = true;
   };
   document.getElementById("animationOffButton").onclick = function() { 
-    g_AnimationOn = false;
+    g_animationOn = false;
   };
+  document.getElementById("spinOnButton").onclick = function() {
+    g_spinMode = true;
+  };
+  document.getElementById("spinOffButton").onclick = function() {
+    g_spinMode = false;
+  };
+  
 }
 
 function setupMouseControl() {
@@ -194,6 +223,15 @@ function setupMouseControl() {
       renderScene();
     }
   };
+
+  canvas.addEventListener('click', function(ev) {
+    if (ev.shiftKey) {
+      g_pokeAnimation = true;
+      g_spiralStartTime = g_seconds; // save the time when the poke started
+      g_spiralSpin = 0;  
+      g_totalSpin = 720; 
+    }
+  });
 }
 
 //===============================================
@@ -202,18 +240,40 @@ function setupMouseControl() {
 
 function tick() {
   g_seconds = performance.now()/1000.0-g_startTime; // Update the current time
-  // g_globalAngle = (g_globalAngle+1) % 360; // Update the global angle
+ 
+  if(g_spinMode) {
+   g_globalAngle = (g_globalAngle+1) % 360;
+  }
+
   updateAnimationAngles(); // Update the angles for animation
-  renderScene(); // Render the scene
+  renderScene(); 
   requestAnimationFrame(tick); // Request the next frame
 }
 
-
 function updateAnimationAngles() {
-  if (g_AnimationOn) {
-    // g_yellowAngle = 45*Math.sin(g_seconds); // Update the yellow arm 
-    g_bobHeight = 0.06 * Math.sin(1.5 * g_seconds - 1.5);
-    g_tiltAngle = 7 * Math.sin(1.5 * g_seconds); // 7 degree tilt
+  g_normalBobHeight = 0.06 * Math.sin(1.5 * g_seconds - 1.5);
+  g_normalTiltAngle = 7 * Math.sin(1.5 * g_seconds);
+  if (g_pokeAnimation) {
+    g_bobHeight = 0;
+    g_tiltAngle = 0;
+
+    let elapsed = g_seconds - g_spiralStartTime;
+    let duration = 2.0; // seconds
+    let t = Math.min(elapsed / duration, 1.0); // normalized time [0,1]
+
+    // Ease-out cubic
+    let easeOut = 1 - Math.pow(1 - t, 3);
+
+    g_spiralSpin = easeOut * g_totalSpin;
+
+    if (t >= 1.0) {
+      g_pokeAnimation = false; 
+      g_spiralSpin = 0; 
+    }
+
+  } else if (g_animationOn) {
+    g_bobHeight = g_normalBobHeight; 
+    g_tiltAngle = g_normalTiltAngle; 
 
     g_waveAngles = [];
     for (let i = 0; i < g_segmentCount; i++) { 
@@ -236,8 +296,13 @@ function setCameraMatrix() {
   var globalRotMat = new Matrix4();
   globalRotMat.translate(0, 0, -5);  // Move camera back
   globalRotMat.rotate(g_mouseYRotation, 0, 1, 0);
-  globalRotMat.rotate(g_mouseXRotation, -1, 0, 0);
+  globalRotMat.rotate(g_mouseXRotation, 1, 0, 0);
   globalRotMat.rotate(g_globalAngle, 0, 1, 0);
+
+  if (g_spiralSpin != 0) {
+    globalRotMat.rotate(g_spiralSpin, 0, 0, 1); // spiral around Z axis
+  }
+
   gl.uniformMatrix4fv(u_GlobalRotationMatrix, false, globalRotMat.elements);
 }
 
@@ -283,21 +348,21 @@ function drawPupilsandReflections() {
   pup.render();
 
   //Draw eye reflections  
-  var shine = new Cylinder();
-  shine.color = [1.0, 1.0, 1.0, 0.3];
-  shine.segments = 16;
-  shine.matrix = new Matrix4(g_voxelBaseMatrix); 
-  shine.matrix.translate(-0.1, 0.06, -0.521);
-  shine.matrix.scale(0.1, 0.08, 0.2);
-  shine.render();  
+  var ref1 = new Cylinder();
+  ref1.color = [1.0, 1.0, 1.0, 0.3];
+  ref1.segments = 16;
+  ref1.matrix = new Matrix4(g_voxelBaseMatrix); 
+  ref1.matrix.translate(0.1, 0.06, -0.521);
+  ref1.matrix.scale(0.1, 0.08, 0.2);
+  ref1.render();  
 
-  var shine2 = new Cylinder();
-  shine2.color = [1.0, 1.0, 1.0, 0.2];
-  shine2.segments = 16;
-  shine2.matrix = new Matrix4(g_voxelBaseMatrix);
-  shine2.matrix.translate(0.01, -0.02, -0.521);
-  shine2.matrix.scale(0.075, 0.06, 0.2);
-  shine2.render();
+  var ref2 = new Cylinder();
+  ref2.color = [1.0, 1.0, 1.0, 0.2];
+  ref2.segments = 16;
+  ref2.matrix = new Matrix4(g_voxelBaseMatrix);
+  ref2.matrix.translate(0.01, -0.02, -0.521);
+  ref2.matrix.scale(0.075, 0.06, 0.2);
+  ref2.render();
 }
 
 function drawTentacles() {
@@ -311,8 +376,17 @@ function drawTentacles() {
     let segmentLength = 0.25; // Longer segment length
   
     for (let i = 0; i < tentacle.length; i++) {
+      if (i == 0) {
+        tentacleBaseMatrix.rotate(g_baseTentacleAngle, 1, 0, 0);
+      } else if (i == 1) {
+        tentacleBaseMatrix.rotate(g_secondTentacleAngle, 1, 0, 0);
+      } else if (i == 2) {
+        tentacleBaseMatrix.rotate(g_thirdTentacleAngle, 1, 0, 0);
+      } else if (i == 3) {
+        tentacleBaseMatrix.rotate(g_tipTentacleAngle, 1, 0, 0);
+      }
+
       let segment = tentacle[i];
-  
       let segmentMatrix = new Matrix4(tentacleBaseMatrix);
       
       if (g_waveAngles.length > i) {
@@ -320,10 +394,9 @@ function drawTentacles() {
       }
 
       let scaleFactor = 0.125 * (1.0 - 0.2 * i); // Shrinks toward tip
+
       segmentMatrix.scale(scaleFactor, scaleFactor, segmentLength);
-  
       segmentMatrix.translate(0, 0, 0.5); // Move half its height forward
-  
       segment.matrix = segmentMatrix;
       segment.render();
   
