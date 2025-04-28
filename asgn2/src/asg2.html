@@ -1,0 +1,85 @@
+<!-- 
+Sebastian Morgese
+smorgese@ucsc.edu
+
+Notes to Grader:
+ - I've include a dropdown menu at the bottom of the page that links to external sources I've used for the assignment.
+ - To play the game, click the "Start Game" button and click on the canvas. The goal is to not get caught by the cat (the red circle) for as long as possible. 
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Assignment 2</title>
+</head>
+
+<body onload="main()">
+  <div style="display: flex; gap: 20px;">
+    <!-- Canvas -->
+    <canvas id="webgl" width="400" height="400">
+      Please use a browser that supports "canvas"
+    </canvas>
+  
+  </div>
+  
+  <p>
+    Performance: <br>
+    <span id="numdot">XXX</span>
+  </p>
+
+  <!-- Controls -->
+  <section>
+
+    <strong>Joint Controls:</strong>
+
+    <p>
+      Yellow:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="yellowSlide" />
+    </p>
+
+    <p>
+      Magenta:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="magentaSlide" />
+    </p>
+
+    <p>
+      Camera Angle: 
+      <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
+    </p>
+
+    Animation:
+    <p>
+      <button type="button" id="animationOnButton">ON</button>
+      <button type="button" id="animationOffButton">OFF</button>
+    </p>
+  </section>
+
+  <!-- External Sources Dropdown -->
+  <section class="bottom">
+    <label for="sources"><strong>External Sources:</strong></label>
+    <select id="sources" onchange="if(this.value) window.open(this.value)">
+      <option value=""></option>
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame">
+        [link] MDN - requestAnimationFrame
+      </option>
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect">
+        [link] MDN - getBoundingClientRect
+      </option>
+      <option value="">
+        [info] ChatGPT - Helped explain how to structure a basic game loop
+      </option>
+    </select>
+  </section>
+
+  <!-- Scripts -->
+  <script src="../lib/cuon-matrix-cse160.js"></script>
+  <script src="../lib/webgl-utils.js"></script>
+  <script src="../lib/webgl-debug.js"></script>
+  <script src="../lib/cuon-utils.js"></script>
+  <script src="triangles.js"></script>
+  <script src="cylinders.js"></script>
+  <script src="cubes.js"></script>
+  <script src="asg2.js"></script>
+</body>
+</html>
