@@ -258,7 +258,7 @@ function updateAnimationAngles() {
     g_tiltAngle = 0;
 
     let elapsed = g_seconds - g_spiralStartTime;
-    let duration = 2.0; // seconds
+    let duration = 2.0; // in seconds
     let t = Math.min(elapsed / duration, 1.0); // normalized time [0,1]
 
     // Ease-out cubic
@@ -277,7 +277,7 @@ function updateAnimationAngles() {
 
     g_waveAngles = [];
     for (let i = 0; i < g_segmentCount; i++) { 
-      let angle = 7 * Math.sin(1.5 * g_seconds - i); // 7 degree wave angle
+      let angle = 7 * Math.sin(1.5 * g_seconds - i); // 7 degree wave angle, 1.5s to match phase of other animations
       g_waveAngles.push(angle);
     }
 
@@ -373,7 +373,7 @@ function drawTentacles() {
     let tentacleBaseMatrix = new Matrix4(g_voxelBaseMatrix);
     tentacleBaseMatrix.translate(base[0], base[1], base[2]); // base location
   
-    let segmentLength = 0.25; // Longer segment length
+    let segmentLength = 0.25; 
   
     for (let i = 0; i < tentacle.length; i++) {
       if (i == 0) {
@@ -449,7 +449,7 @@ function createVoxelSphere() {
 }
 
 function createRedVoxels() {
-  const spacing = 0.125; // cube size
+  const spacing = 0.125; // the cube size
   let redVoxelPositions = [
     // x = 0.5
     [0.5, 0.0, 0.0],
@@ -553,13 +553,13 @@ function createRedVoxels() {
 }
 
 function createTentacles() {
-  g_tentacleSegments = []; // clear first
+  g_tentacleSegments = []; 
 
   for (let t = 0; t < g_tentacleBasePositions.length; t++) {
-    const tentacle = []; // an array for this tentacle
+    const tentacle = [];
     for (let i = 0; i < g_segmentCount; i++) {
       const segment = new Cube();
-      segment.color = [0.95, 0.2, 0.2, 1.0]; // Reddish 
+      segment.color = [0.95, 0.2, 0.2, 1.0]; 
       tentacle.push(segment);
     }
 
