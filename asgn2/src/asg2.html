@@ -4,7 +4,6 @@ smorgese@ucsc.edu
 
 Notes to Grader:
  - I've include a dropdown menu at the bottom of the page that links to external sources I've used for the assignment.
- - To play the game, click the "Start Game" button and click on the canvas. The goal is to not get caught by the cat (the red circle) for as long as possible. 
 -->
 
 <!DOCTYPE html>
@@ -34,25 +33,40 @@ Notes to Grader:
     <strong>Joint Controls:</strong>
 
     <p>
-      Yellow:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="yellowSlide" />
+      Tip:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="tipTentacleSlide" />
     </p>
-
     <p>
-      Magenta:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="magentaSlide" />
+      Second:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="secondTentacleSlide" />
+    </p>
+    <p>
+      Third:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="thirdTentacleSlide" />
+    </p>
+    <p>
+      Base:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="baseTentacleSlide" />
     </p>
 
+    <strong>Other Controls:</strong>
+    
     <p>
       Camera Angle: 
       <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
     </p>
 
-    Animation:
     <p>
+      Animation:
       <button type="button" id="animationOnButton">ON</button>
       <button type="button" id="animationOffButton">OFF</button>
     </p>
+    <p>
+      Spinning (Cinematic) Mode: 
+      <button type="button" id="spinOnButton">ON</button>
+      <button type="button" id="spinOffButton">OFF</button>
+    </p>
+    
   </section>
 
   <!-- External Sources Dropdown -->
@@ -60,14 +74,13 @@ Notes to Grader:
     <label for="sources"><strong>External Sources:</strong></label>
     <select id="sources" onchange="if(this.value) window.open(this.value)">
       <option value=""></option>
-      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame">
-        [link] MDN - requestAnimationFrame
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/blendFunc">
+        [link] MDN - WebGL blendFunc() for alpha transparency
       </option>
-      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect">
-        [link] MDN - getBoundingClientRect
-      </option>
+      <option value="https://slimecubed.github.io/cse160/asg2/src/asg2.html">
+        [link] CSE 160 - Referenced formatting. 
       <option value="">
-        [info] ChatGPT - Helped explain how create a projection matrix and fix camera clipping issues.
+        [info] ChatGPT - Helped explain how create a projection matrix, fix camera clipping issues, and poke animation logic.
       </option>
       <option value="">
         [info] ChatGPT - Helped format my code for better readability.
