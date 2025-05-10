@@ -576,7 +576,7 @@ function buildShapes() { // Build the shapes here to preserve performance
   createVoxelSphere();
   createRedVoxels();
   createTentacles();
-  createTerrain();
+  // createTerrain();
 }
 
 function createVoxelSphere() {
@@ -748,31 +748,31 @@ function drawMap() {
   }
 }
 
-function createTerrain() {
-  noise.seed(Math.random());
+// function createTerrain() {
+//   noise.seed(Math.random());
 
-  const width = 20;
-  const depth = 20;
-  const scale = 5; // Higher = flatter terrain
-  const heightScale = 5;
+//   const width = 20;
+//   const depth = 20;
+//   const scale = 5; // Higher = flatter terrain
+//   const heightScale = 5;
 
-  for (let x = 0; x < width; x++) {
-    for (let z = 0; z < depth; z++) {
-      let value = noise.perlin2(x / scale, z / scale); // -1 to 1
-      let height = Math.floor((value + 1) / 2 * heightScale); // normalize to 0–5
+//   for (let x = 0; x < width; x++) {
+//     for (let z = 0; z < depth; z++) {
+//       let value = noise.perlin2(x / scale, z / scale); // -1 to 1
+//       let height = Math.floor((value + 1) / 2 * heightScale); // normalize to 0–5
 
-      for (let y = 0; y <= height; y++) {
-        const cube = new Cube();
+//       for (let y = 0; y <= height; y++) {
+//         const cube = new Cube();
         
-        cube.textureNum = (y === height) ? 1 : 0; // Top = grass, rest = dirt
-        cube.matrix.translate(x - width/2, y - 1, z - depth/2);
-        g_voxelCubes.push(cube);
-      }
-    }
-  }
+//         cube.textureNum = (y === height) ? 1 : 0; // Top = grass, rest = dirt
+//         cube.matrix.translate(x - width/2, y - 1, z - depth/2);
+//         g_voxelCubes.push(cube);
+//       }
+//     }
+//   }
 
-  console.log("Terrain generated:", g_voxelCubes.length, "cubes");
-}
+//   console.log("Terrain generated:", g_voxelCubes.length, "cubes");
+// }
 
 
 //===============================================
