@@ -1,0 +1,112 @@
+<!-- 
+Sebastian Morgese
+smorgese@ucsc.edu
+
+Notes to Grader:
+ - I've include a dropdown menu at the bottom of the page that links to external sources I've used for the assignment.
+ - I tried to make the Eye of Cthulhu from Terraria :). 
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Assignment 3</title>
+</head>
+
+<body onload="main()">
+  <div style="display: flex; gap: 20px;">
+    <!-- Canvas -->
+    <canvas
+      id="webgl"
+      width="1200"
+      height="400"
+      style="width: 98vw; max-width: 2000px; height: auto; display: block; margin: 0 auto;"
+    >
+      Please use a browser that supports "canvas"
+    </canvas>
+  
+  </div>
+  
+  <p>
+    Performance: <br>
+    <span id="numdot">XXX</span>
+  </p>
+
+  <!-- Controls -->
+  <section>
+
+    <strong>Joint Controls:</strong>
+
+    <p>
+      Base:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="baseTentacleSlide" />
+    </p>
+    <p>
+      Second:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="secondTentacleSlide" />
+    </p>
+    <p>
+      Third:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="thirdTentacleSlide" />
+    </p>
+    <p>
+      Tip:
+      <input type="range" min="-45" max="45" value="0" class="slider" id="tipTentacleSlide" />
+    </p>
+
+    <strong>Other Controls:</strong>
+    
+    <p>
+      Camera Angle: 
+      <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
+    </p>
+
+    <p>
+      Animation:
+      <button type="button" id="animationOnButton">ON</button>
+      <button type="button" id="animationOffButton">OFF</button>
+    </p>
+    <p>
+      Spinning (Cinematic) Mode: 
+      <button type="button" id="spinOnButton">ON</button>
+      <button type="button" id="spinOffButton">OFF</button>
+    </p>
+    
+  </section>
+
+  <!-- External Sources Dropdown -->
+  <section class="bottom">
+    <label for="sources"><strong>External Sources:</strong></label>
+    <select id="sources" onchange="if(this.value) window.open(this.value)">
+      <option value=""></option>
+      <option value="https://www.youtube.com/watch?v=IKB1hWWedMk">
+        [link] The Coding Train - Terrain Generation with Perlin Noise
+      </option>
+      <option value="https://github.com/josephg/noisejs/blob/master/perlin.js">
+        [link] josephg/noisejs - Perlin noise implementation
+      </option>
+      <option value="https://slimecubed.github.io/cse160/asg2/src/asg2.html">
+        [link] CSE 160 - Referenced formatting. 
+      <option value="">
+        [info] ChatGPT - Helped explain how create a projection matrix, fix camera clipping issues, and poke animation logic.
+      </option>
+      <option value="">
+        [info] ChatGPT - Helped format my code for better readability.
+      </option>
+    </select>
+  </section>
+
+  <!-- Scripts -->
+  <script src="../lib/cuon-matrix-cse160.js"></script>
+  <script src="../lib/webgl-utils.js"></script>
+  <script src="../lib/webgl-debug.js"></script>
+  <script src="../lib/cuon-utils.js"></script>
+  <script src="../lib/perlin.js"></script>
+  <script src="triangles.js"></script>
+  <script src="cylinders.js"></script>
+  <script src="cubes.js"></script>
+  <script src="camera.js"></script>
+  <script src="asg3.js"></script>
+</body>
+</html>

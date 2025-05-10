@@ -1,0 +1,8 @@
+- Fix Panning logic
+- Smoothen movement and rotation
+- Fix map
+- Figure out what to do shading
+- WOW (collision? lighting?, etc.)
+- Add multiple textures
+- Add/delete blocks
+- Make path for eye of cthulu (if time)
