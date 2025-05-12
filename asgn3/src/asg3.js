@@ -33,7 +33,7 @@ var FSHADER_SOURCE = `
     } else if (u_whichTexture == 0) {
       gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0 (dirt)
     } else if (u_whichTexture == 1) {
-      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (floor)
+      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (grass)
     } else if (u_whichTexture == 2) { 
       gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Error case, use red color
     }
@@ -67,7 +67,7 @@ var FSHADER_SOURCE = `
 /** @type {number} */ let g_secondTentacleAngle = 0;
 /** @type {number} */ let g_thirdTentacleAngle = 0;
 /** @type {number} */let g_tipTentacleAngle = 0;
-/** @type {number} */ let g_spiralSpin = 0;
+
 
 /** Mouse Control **/
 /** @type {boolean} */ let g_mouseDown = false;
@@ -79,7 +79,6 @@ var FSHADER_SOURCE = `
 /** Timing Variables **/
 /** @type {number} */ let g_startTime = performance.now() / 1000;
 /** @type {number} */ let g_seconds = performance.now()/1000.0-g_startTime; 
-/** @type {number} */ let g_spiralStartTime = 0;
 /** @type {number} */ let g_normalBobHeight = 0;
 /** @type {number} */ let g_bobHeight = 0;
 /** @type {number} */ let g_normalTiltAngle = 0;
@@ -103,23 +102,41 @@ var FSHADER_SOURCE = `
 ];
 /** @type {number[][]} */ let g_map = [];
   
+/** Key State Tracking **/
+/** @type {Object} */ let g_keyStates = {
+    'w': false,
+    'a': false,
+    's': false,
+    'd': false,
+    'q': false,
+    'e': false,
+    ' ': false, 
+    'shift': false,
+    'control': false
+};
 
+// Add this near the other global variables
+let g_eyeOfCthulhu = null;
+let g_eyeEnabled = true;
+
+const MAP_SIZE = 64;
 
 function main() {
   setupWebGL();
   connectVariablesToGLSL();
   addActionForHtmlUI();
   setupMouseControl(); 
-  buildShapes(); // Called here to preserve performance 
+  setupKeyControls();
+  createTerrain();
 
   // Initialize camera
   g_camera = new Camera();
-  // console.log("Camera initialized:", g_camera);
-  // console.log("Eye:", g_camera.eye.elements);
-  // console.log("At:", g_camera.at.elements);
-  // console.log("Up:", g_camera.up.elements);
+
+  // Initialize Eye of Cthulhu
+  g_eyeOfCthulhu = new EyeOfCthulhu();
 
   document.onkeydown = keydown; // Register the keydown event handler
+  document.onkeyup = keyup; // Add this line
   
   initTexture(); // Initialize texture
 
@@ -128,6 +145,17 @@ function main() {
 
   // Clear <canvas>
   requestAnimationFrame(tick); // Start the animation
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('toggleEyeBtn');
+    if (btn) {
+      btn.onclick = function() {
+        g_eyeEnabled = !g_eyeEnabled;
+        btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+      };
+      btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+    }
+  });
 }
 
 function setupWebGL() {
@@ -219,7 +247,7 @@ function initTexture() {
 
   var image1 = new Image();
   image1.onload = function(){ sendTextureToGLSL(image1, 1, u_Sampler1); };
-  image1.src = 'textures/floor.jpg';
+  image1.src = 'textures/grass_top.jpg';
 
   return true;
 }
@@ -288,6 +316,12 @@ function addActionForHtmlUI() {
   document.getElementById("spinOffButton").onclick = function() {
     g_spinMode = false;
   };
+
+  // Toggle Eye of Cthulhu
+  document.getElementById("toggleEyeBtn").onclick = function() {
+    g_eyeEnabled = !g_eyeEnabled;
+    this.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+  };
   
 }
 
@@ -320,8 +354,24 @@ function setupMouseControl() {
     if (ev.movementY !== 0 && g_camera.tiltUp) {
         g_camera.tiltUp(-ev.movementY * sensitivity);
     }
-    renderScene();
   }
+}
+
+function setupKeyControls() {
+    // Add keydown and keyup event listeners
+    document.addEventListener('keydown', function(ev) {
+        const key = ev.key.toLowerCase();
+        if (key in g_keyStates) {
+            g_keyStates[key] = true;
+        }
+    });
+
+    document.addEventListener('keyup', function(ev) {
+        const key = ev.key.toLowerCase();
+        if (key in g_keyStates) {
+            g_keyStates[key] = false;
+        }
+    });
 }
 
 //===============================================
@@ -335,75 +385,41 @@ function tick() {
    g_globalAngle = (g_globalAngle+1) % 360;
   }
 
-  updateAnimationAngles(); // Update the angles for animation
+  // Sprint logic
+  let moveSpeed = SPEEDS.MOVE;
+  if (g_keyStates['shift']) moveSpeed = SPEEDS.MOVE * 2.5; // Sprint multiplier
+
+  // Handle continuous movement like this for smoother result :D 
+  if (g_keyStates['w']) g_camera.moveForward(moveSpeed);
+  if (g_keyStates['s']) g_camera.moveBackward(moveSpeed);
+  if (g_keyStates['a']) g_camera.moveLeft(moveSpeed);
+  if (g_keyStates['d']) g_camera.moveRight(moveSpeed);
+  if (g_keyStates['q']) g_camera.panLeft(1);
+  if (g_keyStates['e']) g_camera.panRight(1);
+  if (g_keyStates[' ']) g_camera.moveUp();
+  if (g_keyStates['control']) g_camera.moveDown();
+
+  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.update(g_camera.eye.elements, g_seconds);
+
   renderScene(); 
   requestAnimationFrame(tick); // Request the next frame
 }
 
-function updateAnimationAngles() {
-  g_normalBobHeight = 0.06 * Math.sin(1.5 * g_seconds - 1.5);
-  g_normalTiltAngle = 7 * Math.sin(1.5 * g_seconds);
-  if (g_pokeAnimation) {
-    g_bobHeight = 0;
-    g_tiltAngle = 0;
-
-    let elapsed = g_seconds - g_spiralStartTime;
-    let duration = 2.0; // in seconds
-    let t = Math.min(elapsed / duration, 1.0); // normalized time [0,1]
-
-    // Ease-out cubic
-    let easeOut = 1 - Math.pow(1 - t, 3);
-
-    g_spiralSpin = easeOut * g_totalSpin;
-
-    if (t >= 1.0) {
-      g_pokeAnimation = false; 
-      g_spiralSpin = 0; 
-    }
-
-  } else if (g_animationOn) {
-    g_bobHeight = g_normalBobHeight; 
-    g_tiltAngle = g_normalTiltAngle; 
-
-    g_waveAngles = [];
-    for (let i = 0; i < g_segmentCount; i++) { 
-      let angle = 7 * Math.sin(1.5 * g_seconds - i); // 7 degree wave angle, 1.5s to match phase of other animations
-      g_waveAngles.push(angle);
-    }
-
-  } else {
-    g_bobHeight = 0;
-    g_tiltAngle = 0;
-    g_waveAngles = [];  
-  }
-}
-
 function keydown(ev) {
-  if (ev.keyCode == 87) { // Forward/W key
-    g_camera.moveForward();
-  } else if (ev.keyCode == 83) { // Back/S key
-    g_camera.moveBackward();
-  } else if (ev.keyCode == 68) { // Right/D key
-    g_camera.moveRight();
-  } else if (ev.keyCode == 65) { // Left/A key
-    g_camera.moveLeft();
-  } else if (ev.keyCode == 81) { // Rot Left/Q key
-    g_camera.panLeft(1);
-  }
-  else if (ev.keyCode == 69) { // Rot Right/E key
-    g_camera.panRight(1);
-  } else if (ev.keyCode == 32) { // Space key
-    g_camera.eye.elements[1] += 0.1; // Move up
-    g_camera.at.elements[1] += 0.1; // Move up
-  } else if (ev.keyCode == 16) { // Shift key /// FIX NOTE SMOOTH
-    g_camera.eye.elements[1] -= 0.1; 
-    g_camera.at.elements[1] -= 0.1; 
-    ev.preventDefault(); // Allows for smooth downward movement
+  // Only handle F and G keys here, movement is handled in tick()
+  if (ev.keyCode == 70) { // F key
+    addBlockInFront(g_camera);
+  } else if (ev.keyCode == 71) { // G key
+    deleteBlockInFront(g_camera);
   } else {
     return; // Prevent the default action for other keys
   }
 
   renderScene();
+}
+
+function keyup(ev) {
+    // No need to do anything here, key states are handled in setupKeyControls
 }
 
 //===============================================
@@ -415,10 +431,6 @@ function setCameraMatrix() {
   globalRotMat.rotate(g_mouseYRotation, 0, 1, 0);  // Rotate around Y first
   globalRotMat.rotate(g_mouseXRotation, 1, 0, 0);  // Then rotate around X
   globalRotMat.rotate(g_globalAngle, 0, 1, 0);     // Then apply global rotation
-
-  if (g_spiralSpin != 0) {
-    globalRotMat.rotate(g_spiralSpin, 0, 0, 1); // spiral around Z axis
-  }
 
   gl.uniformMatrix4fv(u_GlobalRotationMatrix, false, globalRotMat.elements);
 }
@@ -451,294 +463,54 @@ function renderScene() {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  // Draw Floor
-  var floor = new Cube();
-  floor.color = [1.0, 0.0, 0.0, 1.0];
-  floor.textureNum = 1; // Use texture 1
-  floor.matrix.translate(0.0, -0.76, 0.0); // Move to the floor
-  floor.matrix.scale(15.0, 0.01, 15.0); // Scale to make it a floor
-  floor.matrix.translate(-0.5, 0.0, -0.5); // Center the floor
-  floor.renderFast();
-
-  // Draw the skybox
+  // 1. Draw skybox (opaque)
   var skybox = new Cube();
   skybox.color = [0.53, 0.8, 0.92, 1.0];
-  skybox.textureNum = -2; // Use color
-  skybox.matrix.scale(50.0, 50.0, 50.0); // Scale to make it a skybox
-  skybox.matrix.translate(-0.5, -0.5, -0.5); // Move to the center of the scene
+  skybox.textureNum = -2;
+  skybox.matrix.scale(50.0, 50.0, 50.0);
+  skybox.matrix.translate(-0.5, -0.5, -0.5);
   skybox.renderFast();
 
+  // 2. Draw all opaque objects (blocks, Eye, etc.)
   drawMap();
+  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.render(g_camera.eye.elements, g_seconds);
 
-
-  // Draw voxels
-  for (let i = 0; i < g_voxelCubes.length; i++) {
-    let cube = g_voxelCubes[i];
-    cube.matrix = new Matrix4(g_voxelBaseMatrix); // Start from parent
-    cube.matrix.multiply(cube.baseMatrix);        // Apply own position
-    cube.renderFast();
-  }
-
-  drawPupilsandReflections();
-  drawTentacles(); 
+  // 3. Draw transparent floor last
   
+  // Draw the floor
+  var floor = new Cube();
+  floor.color = [0.02, 0.0, 1.0, 0.8];
+  floor.textureNum = -2; // Use texture -2 (color)
+  floor.matrix.setIdentity();
+  floor.matrix.translate(0.0, 0.63, 0.0); 
+  floor.matrix.scale(32.0, 0.01, 32.0); 
+  floor.matrix.translate(-0.5, 0.0, -0.5); 
+  floor.renderFast();
+
+
+
   // Performance test
   var duration = performance.now() - startTime;
   sendTextToHTML("ms: " + Math.floor(duration) + " fps: " + Math.floor(1000/duration), "numdot");
-}
-
-function drawPupilsandReflections() {
-  // Draw pupils
-  var pup = new Cylinder();
-  pup.color = [0.0, 0.0, 0.0, 1.0];
-  pup.segments = 8;
-  pup.matrix = new Matrix4(g_voxelBaseMatrix); 
-  pup.matrix.translate(0.0, 0.0, -0.52);
-  pup.matrix.scale(0.3, 0.3, 0.2);
-  pup.render();
-
-  //Draw eye reflections  
-  var ref1 = new Cylinder();
-  ref1.color = [1.0, 1.0, 1.0, 0.3];
-  ref1.segments = 16;
-  ref1.matrix = new Matrix4(g_voxelBaseMatrix); 
-  ref1.matrix.translate(0.1, 0.06, -0.521);
-  ref1.matrix.scale(0.1, 0.08, 0.2);
-  ref1.render();  
-
-  var ref2 = new Cylinder();
-  ref2.color = [1.0, 1.0, 1.0, 0.2];
-  ref2.segments = 16;
-  ref2.matrix = new Matrix4(g_voxelBaseMatrix);
-  ref2.matrix.translate(0.01, -0.02, -0.521);
-  ref2.matrix.scale(0.075, 0.06, 0.2);
-  ref2.render();
-}
-
-function drawTentacles() {
-  for (let t = 0; t < g_tentacleSegments.length; t++) {
-    let base = g_tentacleBasePositions[t];
-    let tentacle = g_tentacleSegments[t];
-  
-    let tentacleBaseMatrix = new Matrix4(g_voxelBaseMatrix);
-    tentacleBaseMatrix.translate(base[0], base[1], base[2]); // base location
-  
-    let segmentLength = 0.25; 
-  
-    for (let i = 0; i < tentacle.length; i++) {
-      if (i == 0) {
-        tentacleBaseMatrix.rotate(g_baseTentacleAngle, 1, 0, 0);
-      } else if (i == 1) {
-        tentacleBaseMatrix.rotate(g_secondTentacleAngle, 1, 0, 0);
-      } else if (i == 2) {
-        tentacleBaseMatrix.rotate(g_thirdTentacleAngle, 1, 0, 0);
-      } else if (i == 3) {
-        tentacleBaseMatrix.rotate(g_tipTentacleAngle, 1, 0, 0);
-      }
-
-      let segment = tentacle[i];
-      let segmentMatrix = new Matrix4(tentacleBaseMatrix);
-      
-      if (g_waveAngles.length > i) {
-        tentacleBaseMatrix.rotate(g_waveAngles[i], 1, 0, 0);
-      }
-
-      let scaleFactor = 0.125 * (1.0 - 0.2 * i); // Shrinks toward tip
-
-      segmentMatrix.scale(scaleFactor, scaleFactor, segmentLength);
-      segmentMatrix.translate(0, 0, 0.5); // Move half its height forward
-      segment.matrix = segmentMatrix;
-      segment.renderFast();
-  
-      tentacleBaseMatrix.translate(0, 0, segmentLength); // Move up for next segment
-    }
-  }
 }
 
 //===============================================
 // Scene Construction
 //===============================================
 
-function buildShapes() { // Build the shapes here to preserve performance
-  g_voxelCubes = []; 
-  createVoxelSphere();
-  createRedVoxels();
-  createTentacles();
-  createTerrain();
-}
-
-function createVoxelSphere() {
-  const size = 8;
-  const outerRadius = size / 2;
-  const innerRadius = outerRadius * 0.8; 
-  // Create a sphere of cubes 
-  for (let x = 0; x < size; x++) {
-    for (let y = 0; y < size; y++) {
-      for (let z = 0; z < size; z++) {
-        const dx = x - (size - 1) / 2; 
-        const dy = y - (size - 1) / 2; 
-        const dz = z - (size - 1) / 2; 
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-        if (distance < outerRadius && distance > innerRadius) { // Makes the sphere hollow
-          const cube = new Cube();
-          cube.textureNum = -2; // Use color
-          if (z == 0) {
-            cube.color = [0.2, 0.2, 0.8, 1.0];
-          }
-          else {
-            cube.color = [0.95, 0.9, 0.8, 1.0];
-          }
-          // Save relative placement
-          cube.baseMatrix = new Matrix4();
-          cube.baseMatrix.translate(x/size-0.5, y/size-0.5, z/size-0.5); // Translate to the center of the cube
-          cube.baseMatrix.scale(0.125, 0.125, 0.125);
-          g_voxelCubes.push(cube);
-        }
-      }
-    }
-  }
-}
-
-function createRedVoxels() {
-  const spacing = 0.125; // the cube size
-  let redVoxelPositions = [
-    // x = 0.5
-    [0.5, 0.0, 0.0],
-    [0.5, 0.0, -0.125],
-
-    // x = 0.375
-    [0.375, 0.0, 0.25],
-    [0.375, 0.125, 0.125],
-    [0.375, -0.125, 0.25],
-    [0.375, -0.25, 0.125],
-
-    // x = 0.25
-    [0.25, 0.0, 0.375],
-    [0.25, 0.125, 0.375],
-    [0.25, 0.25, 0.25],
-    [0.25, 0.375, 0.125],
-    [0.25, -0.125, 0.375],
-    [0.25, -0.25, 0.375],
-    [0.25, -0.375, 0.25],
-    [0.25, -0.5, 0.125],
-    
-    // x = 0.125
-    [0.125, 0.0, 0.5],
-    [0.125, 0.125, 0.375],
-    [0.125, 0.25, 0.375],
-    [0.125, 0.375, 0.25],
-    [0.125, -0.125, 0.5],
-    [0.125, -0.25, 0.375],
-    [0.125, -0.375, 0.375],
-    [0.125, -0.5, 0.25],
-
-    // x = 0.0
-    [0.0, 0.0, 0.5],
-    [0.0, 0.125, 0.5],
-    [0.0, 0.25, 0.375],
-    [0.0, 0.375, 0.25],
-    [0.0, 0.5, 0.125],
-    [0.0, 0.5, 0],
-    [0.0, -0.125, 0.5],
-    [0.0, -0.25, 0.5],
-    [0.0, -0.375, 0.375],
-    [0.0, -0.5, 0.25],
-    [0.0, -0.625, 0.125],
-    
-    // x = -0.125
-    [-0.125, 0.0, 0.5],
-    [-0.125, 0.125, 0.5],
-    [-0.125, 0.25, 0.375],
-    [-0.125, 0.375, 0.25],
-    [-0.125, -0.125, 0.5],
-    [-0.125, -0.25, 0.5],
-    [-0.125, -0.375, 0.375],
-    [-0.125, -0.5, 0.25],
-    [-0.125, -0.625, 0.125],
-    [-0.125, -0.625, 0.0],
-
-    // x = -0.25
-    [-0.25, 0.0, 0.5],
-    [-0.25, 0.125, 0.375],
-    [-0.25, 0.25, 0.375],
-    [-0.25, 0.375, 0.25],
-    [-0.25, 0.375, 0.125],
-    [-0.25, -0.125, 0.5],
-    [-0.25, -0.25, 0.375],
-    [-0.25, -0.375, 0.375],
-    [-0.25, -0.5, 0.25],
-
-    // x = -0.375
-    [-0.375, 0.0, 0.375],
-    [-0.375, 0.125, 0.375],
-    [-0.375, 0.25, 0.25],
-    [-0.375, 0.375, 0.125],
-    [-0.375, 0.375, 0.0],
-    [-0.375, -0.125, 0.375],
-    [-0.375, -0.25, 0.375],
-    [-0.375, -0.375, 0.25],
-    [-0.375, -0.5, 0.125],
-
-    //x = -0.5 
-    [-0.5, 0.0, 0.25],
-    [-0.5, 0.125, 0.125],
-    [-0.5, -0.125, 0.25],
-    [-0.5, -0.25, 0.25],
-    [-0.5, 0.25, -0.125],
-    [-0.5, -0.375, 0.125],
-
-    // x = -0.625
-    [-0.625, -0.25, 0.0],
-  ];
-
-  // Loop through positions for easier placement
-  for (let i = 0; i < redVoxelPositions.length; i++) {
-    let pos = redVoxelPositions[i];
-    const red = new Cube();
-    red.color = [1.0, 0.0, 0.0, 1.0];
-    red.textureNum = -2; // Use color
-    red.baseMatrix = new Matrix4();
-    red.baseMatrix.translate(pos[0], pos[1], pos[2]);
-    red.baseMatrix.scale(spacing, spacing, spacing);
-    g_voxelCubes.push(red);
-  }
-}
-
-function createTentacles() {
-  g_tentacleSegments = []; 
-  for (let t = 0; t < g_tentacleBasePositions.length; t++) {
-    const tentacle = [];
-    for (let i = 0; i < g_segmentCount; i++) {
-      const segment = new Cube();
-      segment.color = [0.95, 0.2, 0.2, 1.0]; 
-      segment.textureNum = -2; // Use color
-      tentacle.push(segment);
-    }
-
-    g_tentacleSegments.push(tentacle); // store whole tentacle
-  }
-}
-
 function drawMap() {
-  // Debug logging
-  // console.log("g_map:", g_map);
-  // console.log("g_map length:", g_map ? g_map.length : "undefined");
   let wall = new Cube();
-  for (let x = 0; x < 32; x++) {
-    for (let z = 0; z < 32; z++) {
+  for (let x = 0; x < MAP_SIZE; x++) {
+    for (let z = 0; z < MAP_SIZE; z++) {
       let height = g_map[x][z];
       if (height > 0) {
-        // For controlling the height
-        for (let y = 0; y < height; y++) {
-          wall.matrix.setIdentity(); // Reset transforms
-          wall.color = [1.0, 1.0, 1.0, 1.0];
-          wall.textureNum = 0; // Use texture 0
-          wall.matrix.scale(0.5, 0.5, 0.5);
-          wall.matrix.translate(x - 16, y - 1.5, z - 16);  // Center the map around (0,0) by subtracting 16 (half of 32)
-          
-          wall.renderFast();
-        }
+        let y = height - 1;
+        wall.matrix.setIdentity();
+        wall.color = [1.0, 1.0, 1.0, 1.0];
+        wall.textureNum = 0;
+        wall.matrix.scale(0.5, 0.5, 0.5);
+        wall.matrix.translate(x - MAP_SIZE / 2, y - 1.5, z - MAP_SIZE / 2);
+        wall.renderFast();
       }
     }
   }
@@ -746,32 +518,18 @@ function drawMap() {
 
 function createTerrain() {
   noise.seed(Math.random());
-
-  const width = 32;
-  const depth = 32;
-  const scale = 8; // Higher = flatter terrain
-  const heightScale = 4; // Maximum height of walls
-
-  // Initialize g_map with zeros
+  const width = MAP_SIZE;
+  const depth = MAP_SIZE;
+  const scale = 35; // Higher = smoother/flatter terrain
+  const heightScale = 8; // Maximum height of walls, more variety
   g_map = Array(width).fill().map(() => Array(depth).fill(0));
-
   for (let x = 0; x < width; x++) {
     for (let z = 0; z < depth; z++) {
-      // Generate noise value between -1 and 1
-      let value = noise.perlin2(x / scale, z / scale);
-      
-      // Convert to height between 0 and heightScale
+      let value = noise.simplex2(x / scale, z / scale);
       let height = Math.floor((value + 1) / 2 * heightScale);
-      
-      // Ensure outer walls are always height 4
-      if (x === 0 || x === width - 1 || z === 0 || z === depth - 1) {
-        height = 4;
-      }
-      
       g_map[x][z] = height;
     }
   }
-
   console.log("Terrain generated:", g_map.length, "x", g_map[0].length, "map");
 }
 
@@ -787,4 +545,217 @@ function sendTextToHTML(text, htmlID) {
     return;
   }
   element.innerHTML = text;
+}
+
+// Helper to get map cell in front of the camera
+function getTargetBlock(camera, maxDistance = 5.0, step = 0.05) {
+    let dir = new Vector3(camera.at.elements);
+    dir.sub(camera.eye);
+    dir.normalize();
+    for (let t = 0.5; t < maxDistance; t += step) {
+        let pos = new Vector3(camera.eye.elements);
+        let stepVec = new Vector3(dir.elements);
+        stepVec = stepVec.mul(t);
+        pos.add(stepVec);
+        let mapX = Math.floor(pos.elements[0] + 16);
+        let mapZ = Math.floor(pos.elements[2] + 16);
+        let y = pos.elements[1];
+        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) break;
+        let blockHeight = g_map[mapX][mapZ] * 0.5;
+        // Check if y is just below the top of the stack
+        if (y < blockHeight + 0.25 && y > blockHeight - 0.25 && g_map[mapX][mapZ] > 0) {
+            console.log('Targeting block at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
+            return { mapX, mapZ, blockHeight };
+        }
+    }
+    return null;
+}
+
+function getTargetEmpty(camera, maxDistance = 5.0, step = 0.05) {
+    let dir = new Vector3(camera.at.elements);
+    dir.sub(camera.eye);
+    dir.normalize();
+    for (let t = 0.5; t < maxDistance; t += step) {
+        let pos = new Vector3(camera.eye.elements);
+        let stepVec = new Vector3(dir.elements);
+        stepVec = stepVec.mul(t);
+        pos.add(stepVec);
+        let mapX = Math.floor(pos.elements[0] + 16);
+        let mapZ = Math.floor(pos.elements[2] + 16);
+        let y = pos.elements[1];
+        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) break;
+        let blockHeight = g_map[mapX][mapZ] * 0.5;
+        // Check if y is just above the top of the stack
+        if (y > blockHeight + 0.25) {
+            console.log('Targeting empty at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
+            return { mapX, mapZ, blockHeight };
+        }
+    }
+    return null;
+}
+
+function intbound(s, ds) {
+    if (ds < 0) {
+        return intbound(-s, -ds);
+    } else {
+        s = mod(s, 1);
+        return (1 - s) / ds;
+    }
+}
+
+function mod(value, modulus) {
+    return ((value % modulus) + modulus) % modulus;
+}
+
+function ddaRaycast(camera, maxDistance = 5.0) {
+    // Get camera position and direction
+    let pos = new Vector3(camera.eye.elements);
+    let dir = new Vector3(camera.at.elements);
+    dir.sub(camera.eye);
+    dir.normalize();
+
+    console.log("Raycast from:", pos.elements, "direction:", dir.elements);
+
+    // Convert to grid coordinates
+    let x = pos.elements[0] + 16;
+    let y = pos.elements[1];
+    let z = pos.elements[2] + 16;
+
+    // Calculate step direction
+    let stepX = dir.elements[0] > 0 ? 1 : -1;
+    let stepY = dir.elements[1] > 0 ? 1 : -1;
+    let stepZ = dir.elements[2] > 0 ? 1 : -1;
+
+    // Calculate tMax and tDelta for each axis
+    let tMaxX = intbound(x, dir.elements[0]);
+    let tMaxY = intbound(y, dir.elements[1]);
+    let tMaxZ = intbound(z, dir.elements[2]);
+    let tDeltaX = Math.abs(1 / dir.elements[0]);
+    let tDeltaY = Math.abs(1 / dir.elements[1]);
+    let tDeltaZ = Math.abs(1 / dir.elements[2]);
+
+    // Current grid position
+    let mapX = Math.floor(x);
+    let mapY = Math.floor(y);
+    let mapZ = Math.floor(z);
+
+    console.log("Starting grid position:", mapX, mapY, mapZ);
+
+    // Track which axis we're moving along
+    let lastStep = -1;
+
+    for (let t = 0; t < maxDistance;) {
+        // Check if we're in bounds
+        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) {
+            console.log("Out of bounds:", mapX, mapZ);
+            break;
+        }
+        
+        // Check if we're at a valid height
+        if (mapY >= 0 && mapY < 4) {
+            let blockHeight = g_map[mapX][mapZ];
+            if (blockHeight > 0) {
+                // Convert block height to world coordinates
+                let worldHeight = blockHeight * 0.5;
+                // Check if we're at the right height for this block
+                if (Math.abs(y - worldHeight) < 0.25) {
+                    console.log("Hit block at:", mapX, mapZ, "height:", worldHeight, "face:", lastStep);
+                    return { 
+                        mapX, 
+                        mapZ, 
+                        mapY: Math.floor(worldHeight * 2), // Convert back to block height
+                        face: lastStep // 0=X, 1=Y, 2=Z
+                    };
+                }
+            }
+        }
+
+        // Find the next intersection
+        if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+            t = tMaxX;
+            tMaxX += tDeltaX;
+            mapX += stepX;
+            lastStep = 0;
+        } else if (tMaxY < tMaxZ) {
+            t = tMaxY;
+            tMaxY += tDeltaY;
+            mapY += stepY;
+            lastStep = 1;
+        } else {
+            t = tMaxZ;
+            tMaxZ += tDeltaZ;
+            mapZ += stepZ;
+            lastStep = 2;
+        }
+    }
+    console.log("No block hit");
+    return null;
+}
+
+function addBlockInFront(camera) {
+    let hit = ddaRaycast(camera);
+    if (!hit) {
+        console.log("No block hit for adding");
+        return;
+    }
+    
+    let { mapX, mapZ, mapY, face } = hit;
+    console.log("Adding block near:", mapX, mapZ, "face:", face);
+    
+    // Get direction from camera
+    let dir = new Vector3(camera.at.elements);
+    dir.sub(camera.eye);
+    dir.normalize();
+    
+    // Calculate the position for the new block based on which face was hit
+    let newX = mapX;
+    let newZ = mapZ;
+    
+    // Move in the direction of the face that was hit
+    if (face === 0) { // X face
+        newX += (dir.elements[0] > 0 ? 1 : -1);
+    } else if (face === 1) { // Y face
+        // For Y faces, we want to place on top of the current stack
+        if (g_map[mapX][mapZ] < 4) {
+            g_map[mapX][mapZ] += 1;
+            console.log('Added block on top at', mapX, mapZ, 'new height:', g_map[mapX][mapZ]);
+        }
+        return;
+    } else if (face === 2) { // Z face
+        newZ += (dir.elements[2] > 0 ? 1 : -1);
+    }
+    
+    // Check if the new position is valid
+    if (newX < 0 || newX >= 32 || newZ < 0 || newZ >= 32) {
+        console.log("Invalid position for new block:", newX, newZ);
+        return;
+    }
+    
+    // Place block at the new position
+    if (g_map[newX][newZ] < 4) {
+        g_map[newX][newZ] += 1;
+        console.log('Added block at', newX, newZ, 'new height:', g_map[newX][newZ]);
+    } else {
+        console.log("Stack height limit reached at", newX, newZ);
+    }
+}
+
+function deleteBlockInFront(camera) {
+    let hit = ddaRaycast(camera);
+    if (!hit) {
+        console.log("No block hit for deletion");
+        return;
+    }
+    
+    let { mapX, mapZ, mapY } = hit;
+    console.log("Attempting to delete block at:", mapX, mapZ, "height:", mapY);
+    
+    // Only delete if there's a block to delete and we're looking at it
+    let blockHeight = g_map[mapX][mapZ] * 0.5;
+    if (g_map[mapX][mapZ] > 0 && Math.abs(mapY - blockHeight) < 0.25) {
+        g_map[mapX][mapZ] -= 1;
+        console.log('Deleted block at', mapX, mapZ, 'new height:', g_map[mapX][mapZ]);
+    } else {
+        console.log("No block to delete at", mapX, mapZ);
+    }
 }
