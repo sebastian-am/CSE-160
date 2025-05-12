@@ -15,65 +15,83 @@ Notes to Grader:
 </head>
 
 <body onload="main()">
-  <div style="display: flex; gap: 20px;">
-    <!-- Canvas -->
-    <canvas
-      id="webgl"
-      width="1200"
-      height="400"
-      style="width: 98vw; max-width: 2000px; height: auto; display: block; margin: 0 auto;"
-    >
-      Please use a browser that supports "canvas"
-    </canvas>
-  
-  </div>
-  
+  <!-- Canvas at the top -->
+  <canvas
+    id="webgl"
+    width="1200"
+    height="400"
+    style="width: 98vw; max-width: 2000px; height: auto; display: block; margin: 0 auto; border-radius: 8px;"
+  >
+    Please use a browser that supports "canvas"
+  </canvas>
   <p>
-    Performance: <br>
+    <strong>Performance:</strong> <br>
     <span id="numdot">XXX</span>
   </p>
 
-  <!-- Controls -->
-  <section>
+  <!-- Table row below the canvas -->
+  <table width="100%">
+    <tr>
+      <!-- Left: Controls/Sliders/Buttons -->
+      <td valign="top" style="width:90%">
+        <section>
+          <strong>Joint Controls:</strong>
+          <p>
+            Base:
+            <input type="range" min="-45" max="45" value="0" class="slider" id="baseTentacleSlide" />
+          </p>
+          <p>
+            Second:
+            <input type="range" min="-45" max="45" value="0" class="slider" id="secondTentacleSlide" />
+          </p>
+          <p>
+            Third:
+            <input type="range" min="-45" max="45" value="0" class="slider" id="thirdTentacleSlide" />
+          </p>
+          <p>
+            Tip:
+            <input type="range" min="-45" max="45" value="0" class="slider" id="tipTentacleSlide" />
+          </p>
 
-    <strong>Joint Controls:</strong>
+          <strong>Other Controls:</strong>
+          <p>
+            Camera Angle: 
+            <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
+          </p>
+          <p>
+            Animation:
+            <button type="button" id="animationOnButton">ON</button>
+            <button type="button" id="animationOffButton">OFF</button>
+          </p>
+          <p>
+            Toggle Eye of Cthulhu:
+            <button id="toggleEyeBtn">Hide Eye</button>
+          </p>
+          <p>
+            Spinning (Cinematic) Mode: 
+            <button type="button" id="spinOnButton">ON</button>
+            <button type="button" id="spinOffButton">OFF</button>
+          </p>
+        </section>
+      </td>
 
-    <p>
-      Base:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="baseTentacleSlide" />
-    </p>
-    <p>
-      Second:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="secondTentacleSlide" />
-    </p>
-    <p>
-      Third:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="thirdTentacleSlide" />
-    </p>
-    <p>
-      Tip:
-      <input type="range" min="-45" max="45" value="0" class="slider" id="tipTentacleSlide" />
-    </p>
-
-    <strong>Other Controls:</strong>
-    
-    <p>
-      Camera Angle: 
-      <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
-    </p>
-
-    <p>
-      Animation:
-      <button type="button" id="animationOnButton">ON</button>
-      <button type="button" id="animationOffButton">OFF</button>
-    </p>
-    <p>
-      Spinning (Cinematic) Mode: 
-      <button type="button" id="spinOnButton">ON</button>
-      <button type="button" id="spinOffButton">OFF</button>
-    </p>
-    
-  </section>
+      <!-- Right: Controls Panel -->
+      <td valign="top" style="width:8%">
+        <div id="controls-panel">
+          <strong>Controls:</strong>
+          <ul style="padding-left: 1em;">
+            <li><b>WASD</b>: Move</li>
+            <li><b>Space</b>: Up</li>
+            <li><b>Ctrl</b>: Down</li>
+            <li><b>Shift</b>: Sprint</li>
+            <li><b>Mouse</b>: Look</li>
+            <li><b>F</b>: Add Block</li>
+            <li><b>G</b>: Delete Block</li>
+          </ul>
+        </div>
+      </td>
+    </tr>
+  </table>
 
   <!-- External Sources Dropdown -->
   <section class="bottom">
@@ -88,11 +106,12 @@ Notes to Grader:
       </option>
       <option value="https://www.planetminecraft.com/texture-pack/dirtcraft-16x/">
         [link] PMC - Dirt texture
+      </option>
       <option value="https://www.pinpng.com/picture/TRiJwRh_creeper-texture-png-diy-minecraft-grass-block-transparent/">
-        [link] ChatGPT - Grass texture
+        [link] Pinpng - Grass texture
       </option>
       <option value="">
-        [info] Pinpng - Helped format my code for better readability.
+        [info] ChatGPT - Helped develop and debug the Eye of Cthulhu update() and render() functions
       </option>
     </select>
   </section>
@@ -107,6 +126,7 @@ Notes to Grader:
   <script src="cylinders.js"></script>
   <script src="cubes.js"></script>
   <script src="camera.js"></script>
+  <script src="eye_of_cthulhu.js"></script>
   <script src="asg3.js"></script>
 </body>
 </html>
