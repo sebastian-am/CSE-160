@@ -31,9 +31,9 @@ var FSHADER_SOURCE = `
     } else if (u_whichTexture == -1) {
       gl_FragColor = vec4(v_UV, 1.0, 1.0); // Use UV debugger
     } else if (u_whichTexture == 0) {
-      gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0
+      gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0 (dirt)
     } else if (u_whichTexture == 1) {
-      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1
+      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (floor)
     } else if (u_whichTexture == 2) { 
       gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Error case, use red color
     }
@@ -101,16 +101,7 @@ var FSHADER_SOURCE = `
   [0.125, 0.25, 0.375],
   [-0.125, 0.0, 0.5],
 ];
-/** @type {number[][]} */ let g_map = [
-  [1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 1, 1, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 1, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1],
-];
+/** @type {number[][]} */ let g_map = [];
   
 
 
@@ -123,10 +114,10 @@ function main() {
 
   // Initialize camera
   g_camera = new Camera();
-  // console.log("Camera initialized:", camera);
-  // console.log("Eye:", camera.eye.elements);
-  // console.log("At:", camera.at.elements);
-  // console.log("Up:", camera.up.elements);
+  // console.log("Camera initialized:", g_camera);
+  // console.log("Eye:", g_camera.eye.elements);
+  // console.log("At:", g_camera.at.elements);
+  // console.log("Up:", g_camera.up.elements);
 
   document.onkeydown = keydown; // Register the keydown event handler
   
@@ -301,40 +292,36 @@ function addActionForHtmlUI() {
 }
 
 function setupMouseControl() {
-  // When the mouse is pressed down, start tracking movement
-  canvas.onmousedown = function(ev) { 
-    g_mouseDown = true; 
-    g_lastX = ev.clientX; 
-    g_lastY = ev.clientY;
-  };
-
-  // When the mouse is released, stop tracking movement
-  window.onmouseup = function(ev) {  // window used to capture mouse up events outside the canvas
-    g_mouseDown = false; 
-  };
-
-  // When the mouse is moved, update the rotation if dragging
-  window.onmousemove = function(ev) { 
-    if (g_mouseDown) {
-      let dx = ev.clientX - g_lastX;
-      let dy = ev.clientY - g_lastY;
-      g_mouseXRotation -= dy;  // Negate dy to invert the Y-axis rotation
-      g_mouseYRotation += dx;
-      g_lastX = ev.clientX;
-      g_lastY = ev.clientY;
-
-      renderScene();
+  // Request pointer lock on canvas click
+  canvas.onclick = function() {
+    canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+    if (canvas.requestPointerLock) {
+      canvas.requestPointerLock();
     }
   };
 
-  canvas.addEventListener('click', function(ev) {
-    if (ev.shiftKey) {
-      g_pokeAnimation = true;
-      g_spiralStartTime = g_seconds; // save the time when the poke started
-      g_spiralSpin = 0;  
-      g_totalSpin = 720; 
+  // Listen for pointer lock changes
+  document.addEventListener('pointerlockchange', lockChangeAlert, false);
+  document.addEventListener('mozpointerlockchange', lockChangeAlert, false);
+
+  function lockChangeAlert() {
+    if (document.pointerLockElement === canvas || document.mozPointerLockElement === canvas) {
+      document.addEventListener('mousemove', updateCameraLook, false);
+    } else {
+      document.removeEventListener('mousemove', updateCameraLook, false);
     }
-  });
+  }
+
+  function updateCameraLook(ev) {
+    const sensitivity = 0.4; // degrees per pixel (twice as fast)
+    if (ev.movementX !== 0) {
+        g_camera.panLeft(-ev.movementX * sensitivity);
+    }
+    if (ev.movementY !== 0 && g_camera.tiltUp) {
+        g_camera.tiltUp(-ev.movementY * sensitivity);
+    }
+    renderScene();
+  }
 }
 
 //===============================================
@@ -392,9 +379,9 @@ function updateAnimationAngles() {
 }
 
 function keydown(ev) {
-  if (ev.keyCode == 87) { // Up/W key
+  if (ev.keyCode == 87) { // Forward/W key
     g_camera.moveForward();
-  } else if (ev.keyCode == 83) { // Down/S key
+  } else if (ev.keyCode == 83) { // Back/S key
     g_camera.moveBackward();
   } else if (ev.keyCode == 68) { // Right/D key
     g_camera.moveRight();
@@ -409,8 +396,9 @@ function keydown(ev) {
     g_camera.eye.elements[1] += 0.1; // Move up
     g_camera.at.elements[1] += 0.1; // Move up
   } else if (ev.keyCode == 16) { // Shift key /// FIX NOTE SMOOTH
-    g_camera.eye.elements[1] -= 0.1; // Move down
-    g_camera.at.elements[1] -= 0.1; // Move down
+    g_camera.eye.elements[1] -= 0.1; 
+    g_camera.at.elements[1] -= 0.1; 
+    ev.preventDefault(); // Allows for smooth downward movement
   } else {
     return; // Prevent the default action for other keys
   }
@@ -468,7 +456,7 @@ function renderScene() {
   floor.color = [1.0, 0.0, 0.0, 1.0];
   floor.textureNum = 1; // Use texture 1
   floor.matrix.translate(0.0, -0.76, 0.0); // Move to the floor
-  floor.matrix.scale(10.0, 0.01, 10.0); // Scale to make it a floor
+  floor.matrix.scale(15.0, 0.01, 15.0); // Scale to make it a floor
   floor.matrix.translate(-0.5, 0.0, -0.5); // Center the floor
   floor.renderFast();
 
@@ -576,7 +564,7 @@ function buildShapes() { // Build the shapes here to preserve performance
   createVoxelSphere();
   createRedVoxels();
   createTentacles();
-  // createTerrain();
+  createTerrain();
 }
 
 function createVoxelSphere() {
@@ -733,46 +721,59 @@ function createTentacles() {
 }
 
 function drawMap() {
-  var wall = new Cube();
-  for (x=0; x<8; x++) {
-    for (y=0; y<8; y++) {
-      if (g_map[x][y] == 1) {
-        wall.matrix.setIdentity(); // Reset transforms
-        wall.color = [1.0, 1.0, 1.0, 1.0];
-        wall.textureNum = 0; // Use texture 0
-        wall.matrix.scale(0.5, 0.5, 0.5); // Scale to make it a wall
-        wall.matrix.translate(x-4, -0.75, y-4);
-        wall.renderFast();
+  // Debug logging
+  // console.log("g_map:", g_map);
+  // console.log("g_map length:", g_map ? g_map.length : "undefined");
+  let wall = new Cube();
+  for (let x = 0; x < 32; x++) {
+    for (let z = 0; z < 32; z++) {
+      let height = g_map[x][z];
+      if (height > 0) {
+        // For controlling the height
+        for (let y = 0; y < height; y++) {
+          wall.matrix.setIdentity(); // Reset transforms
+          wall.color = [1.0, 1.0, 1.0, 1.0];
+          wall.textureNum = 0; // Use texture 0
+          wall.matrix.scale(0.5, 0.5, 0.5);
+          wall.matrix.translate(x - 16, y - 1.5, z - 16);  // Center the map around (0,0) by subtracting 16 (half of 32)
+          
+          wall.renderFast();
+        }
       }
     }
   }
 }
 
-// function createTerrain() {
-//   noise.seed(Math.random());
+function createTerrain() {
+  noise.seed(Math.random());
 
-//   const width = 20;
-//   const depth = 20;
-//   const scale = 5; // Higher = flatter terrain
-//   const heightScale = 5;
+  const width = 32;
+  const depth = 32;
+  const scale = 8; // Higher = flatter terrain
+  const heightScale = 4; // Maximum height of walls
 
-//   for (let x = 0; x < width; x++) {
-//     for (let z = 0; z < depth; z++) {
-//       let value = noise.perlin2(x / scale, z / scale); // -1 to 1
-//       let height = Math.floor((value + 1) / 2 * heightScale); // normalize to 0–5
+  // Initialize g_map with zeros
+  g_map = Array(width).fill().map(() => Array(depth).fill(0));
 
-//       for (let y = 0; y <= height; y++) {
-//         const cube = new Cube();
-        
-//         cube.textureNum = (y === height) ? 1 : 0; // Top = grass, rest = dirt
-//         cube.matrix.translate(x - width/2, y - 1, z - depth/2);
-//         g_voxelCubes.push(cube);
-//       }
-//     }
-//   }
+  for (let x = 0; x < width; x++) {
+    for (let z = 0; z < depth; z++) {
+      // Generate noise value between -1 and 1
+      let value = noise.perlin2(x / scale, z / scale);
+      
+      // Convert to height between 0 and heightScale
+      let height = Math.floor((value + 1) / 2 * heightScale);
+      
+      // Ensure outer walls are always height 4
+      if (x === 0 || x === width - 1 || z === 0 || z === depth - 1) {
+        height = 4;
+      }
+      
+      g_map[x][z] = height;
+    }
+  }
 
-//   console.log("Terrain generated:", g_voxelCubes.length, "cubes");
-// }
+  console.log("Terrain generated:", g_map.length, "x", g_map[0].length, "map");
+}
 
 
 //===============================================
