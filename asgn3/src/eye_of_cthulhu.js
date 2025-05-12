@@ -4,7 +4,7 @@
 class EyeOfCthulhu {
     constructor() {
         this.type = 'eye';
-        this.pos = { x: 0, y: 2, z: 0 };
+        this.pos = { x: 10, y: 5, z: 10 };  // Start further away and higher up
         this.bobPhase = 0;
         this.tiltPhase = 0;
 
@@ -33,9 +33,9 @@ class EyeOfCthulhu {
 
         // Particle system
         this.particles = [];
-        this.maxParticles = 1000;      // More particles
-        this.particleLifetime = 6000.0;  // Much longer lifetime (30 seconds)
-        this.particleSpeed = 0.03;    // Much slower speed
+        this.maxParticles = 1000;
+        this.particleLifetime = 20000.0;  // 
+        this.particleSpeed = 0.002;
         this.particleSize = 0.05;
         this.particleColor = [0.5, 0.0, 0.0, 0.9];
 
@@ -61,7 +61,7 @@ class EyeOfCthulhu {
         let dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         let stopDistance = 2.0; // How close the Eye can get
         if (dist > stopDistance) {
-            let speed = 0.03;
+            let speed = 0.04;
             let moveDist = dist - stopDistance;
             let moveStep = Math.min(speed, moveDist);
             this.pos.x += (dx / dist) * moveStep;
@@ -346,26 +346,16 @@ class EyeOfCthulhu {
         if (this.particles.length >= this.maxParticles) return;
 
         // Create particle at eye surface
-        const radius = 0.5;  // radius of the eye sphere
-        const theta = Math.random() * Math.PI * 2;  //random angle around eye
-        const phi = Math.random() * Math.PI;  // random angle up/down
+        const radius = 0.5;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
         
         // Calculate position on sphere surface
         const x = radius * Math.sin(phi) * Math.cos(theta);
         const y = radius * Math.sin(phi) * Math.sin(theta);
         const z = radius * Math.cos(phi);
 
-        // Calculate direction to player for particle orientation
-        const dx = this.playerDir[0];
-        const dy = this.playerDir[1];
-        const dz = this.playerDir[2];
-        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        
-        // Calculate yaw and pitch to face player
-        const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-        const pitch = Math.asin(dy/dist) * 180 / Math.PI;
-
-        // Calculate outward velocity (away from eye center)
+        // Create particle with constant velocity
         const particle = {
             position: [
                 this.pos.x + x,
@@ -378,21 +368,9 @@ class EyeOfCthulhu {
                 z * this.particleSpeed
             ],
             lifetime: this.particleLifetime,
-            size: this.particleSize,
-            orientation: {
-                yaw: yaw,
-                pitch: pitch
-            }
+            size: this.particleSize
         };
         this.particles.push(particle);
-        // Debug log
-        // console.log('[EyeOfCthulhu] emitParticle:', {
-        //     position: particle.position,
-        //     velocity: particle.velocity,
-        //     lifetime: particle.lifetime,
-        //     size: particle.size,
-        //     orientation: particle.orientation
-        // });
     }
 
     updateParticles(deltaTime) {
@@ -406,18 +384,13 @@ class EyeOfCthulhu {
                 continue;
             }
 
-            // Update position with constant velocity (no gravity)
-            const moveScale = 0.01;  // Much slower movement
-            p.position[0] += p.velocity[0] * deltaTime * moveScale;
-            p.position[1] += p.velocity[1] * deltaTime * moveScale;
-            p.position[2] += p.velocity[2] * deltaTime * moveScale;
+            // Update position with constant velocity
+            p.position[0] += p.velocity[0];
+            p.position[1] += p.velocity[1];
+            p.position[2] += p.velocity[2];
 
-            // Fade out based on lifetime, but start fading later
-            const fadeStart = 0.8; // Start fading at 80% of lifetime
-            let alpha = 1.0;
-            if (p.lifetime < this.particleLifetime * fadeStart) {
-                alpha = p.lifetime / (this.particleLifetime * fadeStart);
-            }
+            // Simple linear fade
+            const alpha = p.lifetime / this.particleLifetime;
             p.color = [this.particleColor[0], this.particleColor[1], this.particleColor[2], alpha * this.particleColor[3]];
         }
     }
@@ -425,7 +398,6 @@ class EyeOfCthulhu {
     drawParticles() {
         if (this.particles.length === 0) return;
 
-        // Create particle vertices (simple quad)
         const particleVertices = new Float32Array([
             -0.5, -0.5, 0.0,
              0.5, -0.5, 0.0,
@@ -449,50 +421,75 @@ class EyeOfCthulhu {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, particleIndices, gl.STATIC_DRAW);
 
         // Set up vertex attributes
-        gl.vertexAttribPointer(
-            a_Position,
-            3,
-            gl.FLOAT,
-            false,
-            0,
-            0
-        );
+        gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(a_Position);
 
-        // Enable blending for particles
+        // Enable blending
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+        // Get camera position and up vector for billboarding
+        const cameraPos = g_camera.eye.elements;
+        const cameraUp = g_camera.up.elements;
+
         // Draw each particle
         for (const p of this.particles) {
-            // Compute direction from particle to player
-            const playerPos = g_camera.eye.elements;
-            const dx = playerPos[0] - p.position[0];
-            const dy = playerPos[1] - p.position[1];
-            const dz = playerPos[2] - p.position[2];
-            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            let yaw = 0, pitch = 0;
-            if (dist > 0.001) { // Avoid division by zero!
-                yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-                pitch = Math.asin(dy/dist) * 180 / Math.PI;
-            }
-
             const particleMatrix = new Matrix4();
             particleMatrix.translate(p.position[0], p.position[1], p.position[2]);
-            // Always face the player
-            particleMatrix.rotate(yaw, 0, 1, 0);   // Yaw (left/right)
-            particleMatrix.rotate(pitch, 1, 0, 0); // Pitch (up/down)
+
+            // Calculate billboard rotation to face camera
+            const dx = cameraPos[0] - p.position[0];
+            const dy = cameraPos[1] - p.position[1];
+            const dz = cameraPos[2] - p.position[2];
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            
+            if (dist > 0.001) {
+                // Calculate forward vector (towards camera)
+                const forward = [dx/dist, dy/dist, dz/dist];
+                
+                // Calculate right vector (perpendicular to forward and up)
+                const right = [
+                    forward[1] * cameraUp[2] - forward[2] * cameraUp[1],
+                    forward[2] * cameraUp[0] - forward[0] * cameraUp[2],
+                    forward[0] * cameraUp[1] - forward[1] * cameraUp[0]
+                ];
+                
+                // Normalize right vector
+                const rightLength = Math.sqrt(right[0]*right[0] + right[1]*right[1] + right[2]*right[2]);
+                if (rightLength > 0.001) {
+                    right[0] /= rightLength;
+                    right[1] /= rightLength;
+                    right[2] /= rightLength;
+                }
+
+                // Calculate up vector (perpendicular to forward and right)
+                const up = [
+                    right[1] * forward[2] - right[2] * forward[1],
+                    right[2] * forward[0] - right[0] * forward[2],
+                    right[0] * forward[1] - right[1] * forward[0]
+                ];
+
+                // Rotation matrix for billboarding effect
+                const rotationMatrix = new Matrix4();
+                rotationMatrix.elements[0] = right[0];
+                rotationMatrix.elements[1] = right[1];
+                rotationMatrix.elements[2] = right[2];
+                rotationMatrix.elements[4] = up[0];
+                rotationMatrix.elements[5] = up[1];
+                rotationMatrix.elements[6] = up[2];
+                rotationMatrix.elements[8] = -forward[0];
+                rotationMatrix.elements[9] = -forward[1];
+                rotationMatrix.elements[10] = -forward[2];
+
+                particleMatrix.multiply(rotationMatrix);
+            }
+
             particleMatrix.scale(p.size, p.size, p.size);
 
-            // Set uniforms
             gl.uniformMatrix4fv(u_ModelMatrix, false, particleMatrix.elements);
             gl.uniform4fv(u_FragColor, p.color || this.particleColor);
-
-            // Draw particle
             gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
         }
-
-        // Disable blending
         gl.disable(gl.BLEND);
     }
 } 

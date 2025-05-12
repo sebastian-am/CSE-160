@@ -59,13 +59,24 @@ Notes to Grader:
             <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
           </p>
           <p>
+            Noise Offset X:
+            <input type="range" min="-100" max="100" value="0" step="1" class="slider" id="noiseOffsetXSlide" />
+          </p>
+          <p>
+            Noise Offset Z:
+            <input type="range" min="-100" max="100" value="0" step="1" class="slider" id="noiseOffsetZSlide" />
+          </p>
+          <p>
+            Noise Scale:
+            <input type="range" min="20" max="80" value="20" step="1" class="slider" id="noiseScaleSlide" />
+          <p>
             Animation:
             <button type="button" id="animationOnButton">ON</button>
             <button type="button" id="animationOffButton">OFF</button>
           </p>
           <p>
             Toggle Eye of Cthulhu:
-            <button id="toggleEyeBtn">Hide Eye</button>
+            <button id="toggleEyeBtn">Call the Eye</button>
           </p>
           <p>
             Spinning (Cinematic) Mode: 
@@ -81,6 +92,8 @@ Notes to Grader:
           <strong>Controls:</strong>
           <ul style="padding-left: 1em;">
             <li><b>WASD</b>: Move</li>
+            <li><b>Q</b>: Pan Left</li>
+            <li><b>E</b>: Pan Right</li>
             <li><b>Space</b>: Up</li>
             <li><b>Ctrl</b>: Down</li>
             <li><b>Shift</b>: Sprint</li>
@@ -110,6 +123,8 @@ Notes to Grader:
       <option value="https://www.pinpng.com/picture/TRiJwRh_creeper-texture-png-diy-minecraft-grass-block-transparent/">
         [link] Pinpng - Grass texture
       </option>
+      <option value="https://en.wikipedia.org/wiki/Ray_casting">
+        [link] Wiki - Ray casting referenece
       <option value="">
         [info] ChatGPT - Helped develop and debug the Eye of Cthulhu update() and render() functions
       </option>
