@@ -1,83 +1,99 @@
 class Camera {
     constructor() {
         this.type = 'camera';
-        this.fov = 90;
-        this.eye = new Vector3([0, 0, 2]);    // Camera position
-        this.at = new Vector3([0, 0, -100]);  // Look at point
-        this.up = new Vector3([0, 1, 0]);     // Up vector
+        this.fov = 60;
+        this.eye = new Vector3([0, 0, 0]);
+        this.at = new Vector3([0, 0, -1]);
+        this.up = new Vector3([0, 1, 0]);
+        this.viewMatrix = new Matrix4();
+        this.viewMatrix.setLookAt(
+            this.eye.elements[0], this.eye.elements[1], this.eye.elements[2],
+            this.at.elements[0], this.at.elements[1], this.at.elements[2],
+            this.up.elements[0], this.up.elements[1], this.up.elements[2]
+        );
+        this.projectionMatrix = new Matrix4();
+        this.projectionMatrix.setPerspective(this.fov, canvas.width/canvas.height, 0.1, 1000);
     }
 
-    moveForward() {
-        // D = at - eye (direction vector)
-        var d = this.at.sub(this.eye);
-        d.normalize();
-        this.eye.add(d);
-        this.at.add(d);
+    moveForward(speed = 0.1) {
+        let f = new Vector3();
+        f.set(this.at);
+        f.sub(this.eye);
+        f.normalize();
+        f = f.mul(speed);
+        this.eye = this.eye.add(f);
+        this.at = this.at.add(f);
     }
 
-    moveBackward() {
-        // D = at - eye (direction vector)
-        var d = this.at.sub(this.eye);
-        d.normalize();
-        this.eye.sub(d);
-        this.at.sub(d);
+    moveBackward(speed = 0.1) {
+        let b = new Vector3();
+        b.set(this.eye);
+        b.sub(this.at);
+        b.normalize();
+        b = b.mul(speed);
+        this.eye = this.eye.add(b);
+        this.at = this.at.add(b);
     }
 
-    moveLeft() {
-        // D = eye - at (direction vector)
-        var d = new Vector3(this.eye.elements);
-        d.sub(this.at);
-        d.normalize();
-        // Calculate left vector: left = d * up (flipped order)
-        var left = Vector3.cross(d, this.up);
-        // Move eye and at left
-        this.eye.add(left);
-        this.at.add(left);
+    moveLeft(speed = 0.1) {
+        let l = new Vector3();
+        l.set(this.at);
+        l.sub(this.eye);
+        l.normalize();
+        let s = Vector3.cross(this.up, l);
+        s.normalize();
+        s = s.mul(speed);
+        this.eye = this.eye.add(s);
+        this.at = this.at.add(s);
     }
 
-    moveRight() {
-        // D = eye - at (direction vector)
-        var d = new Vector3(this.eye.elements);
-        d.sub(this.at);
-        d.normalize();
-
-        // Calculate right vector: right = up * d (flipped order)
-        var right = Vector3.cross(this.up, d);
-
-        // Move eye and at right
-        this.eye.add(right);
-        this.at.add(right);
+    moveRight(speed = 0.1) {
+        let r = new Vector3();
+        r.set(this.at);
+        r.sub(this.eye);
+        r.normalize();
+        let s = Vector3.cross(r, this.up);
+        r.normalize();
+        r = s.mul(speed);
+        this.eye = this.eye.add(s);
+        this.at = this.at.add(s);
     }
 
     panLeft(alpha) {
-        let f = this.at.sub(this.eye); // forward vector (at - eye)
+        let f = new Vector3();
+        f.set(this.at);
+        f.sub(this.eye);
+        if (f.magnitude() < 1e-6) { // just in case it's zero
+            f = new Vector3([0, 0, -1]);
+        }
         let rotationMatrix = new Matrix4();
         rotationMatrix.setRotate(alpha, this.up.elements[0], this.up.elements[1], this.up.elements[2]);
-        
-        let f_prime = rotationMatrix.multiplyVector3(f); // rotated forward
-        this.at = this.eye.add(f_prime); // update 'at' to rotated direction
+        let f_prime = rotationMatrix.multiplyVector3(f);
+        this.at = new Vector3(this.eye.elements); // clone eye
+        this.at.add(f_prime); // at = eye + rotated direction
     }
+
     panRight(alpha) {
         this.panLeft(-alpha);
     }
 
-    rotate(degrees) {
-        let rad = degrees * Math.PI / 180; // convert degrees to radians
-        // create a new point atp, which is a new point in the eye coordinate system
-        let atp = this.at.sub(this.eye); // atp = at - eye = direction vector
-        // r = sqrt((dx)^2+(dy)^2)
-        let r = Math.sqrt(atp.elements[0]**2 + atp.elements[1]**2);
-        // theta = arctan(y,x) 
-        let theta = Math.atan2(atp.elements[1], atp.elements[0]);
-        // remember theta is in radians, so convert to degrees
-        theta += rad
-
-        // newX and newY are the new coordinates of the point in the eye coordinate system
-        let newX = r * Math.cos(theta);
-        let newY = r * Math.sin(theta);
-        let d = new Vector3([newX, newY]);
-    
-        // new at point (fixed to use this.eye instead of eye)
-        this.at = this.eye.add(d);
+    tiltUp(alpha) {
+        // Compute forward vector
+        let f = new Vector3();
+        f.set(this.at);
+        f.sub(this.eye);
+        // Compute right vector (side)
+        let s = Vector3.cross(f, this.up);
+        s.normalize();
+        // Rotate forward vector around right vector
+        let rotationMatrix = new Matrix4();
+        rotationMatrix.setRotate(alpha, s.elements[0], s.elements[1], s.elements[2]);
+        let f_prime = rotationMatrix.multiplyVector3(f);
+        // Clamp to avoid flipping (optional, can be improved)
+        if (Math.abs(f_prime.elements[1]) > 0.99 * f_prime.magnitude()) {
+            return; // Prevent flipping over
+        }
+        this.at = new Vector3(this.eye.elements);
+        this.at.add(f_prime);
     }
 }
