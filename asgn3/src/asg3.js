@@ -24,6 +24,9 @@ var FSHADER_SOURCE = `
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
   uniform sampler2D u_Sampler1;
+  uniform sampler2D u_Sampler2;
+  uniform sampler2D u_Sampler3;
+  uniform sampler2D u_Sampler4;
   uniform int u_whichTexture;
   void main() {
     if (u_whichTexture == -2) {
@@ -33,9 +36,15 @@ var FSHADER_SOURCE = `
     } else if (u_whichTexture == 0) {
       gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0 (dirt)
     } else if (u_whichTexture == 1) {
-      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (grass)
-    } else if (u_whichTexture == 2) { 
-      gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Error case, use red color
+      gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (grass top)
+    } else if (u_whichTexture == 2) {
+      gl_FragColor = texture2D(u_Sampler2, v_UV); // Use texture 2 (cobble)
+    } else if (u_whichTexture == 3) {
+      gl_FragColor = texture2D(u_Sampler3, v_UV); // Use texture 3 (stone)
+    } else if (u_whichTexture == 4) {
+      gl_FragColor = texture2D(u_Sampler4, v_UV); // Use texture 4 (andesite)
+    } else {
+      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // Default color
     }
   }`
 
@@ -55,6 +64,9 @@ var FSHADER_SOURCE = `
 /** @type {WebGLUniformLocation} */ let u_ProjectionMatrix = null;
 /** @type {WebGLUniformLocation} */ let u_Sampler0 = null;
 /** @type {WebGLUniformLocation} */ let u_Sampler1 = null;
+/** @type {WebGLUniformLocation} */ let u_Sampler2 = null;
+/** @type {WebGLUniformLocation} */ let u_Sampler3 = null;
+/** @type {WebGLUniformLocation} */ let u_Sampler4 = null;
 /** @type {WebGLUniformLocation} */ let u_whichTexture = null;
 
 /** Animation Controls **/
@@ -101,6 +113,7 @@ var FSHADER_SOURCE = `
   [-0.125, 0.0, 0.5],
 ];
 /** @type {number[][]} */ let g_map = [];
+/** @type {number[][]} */ let g_textureMap = [];
   
 /** Key State Tracking **/
 /** @type {Object} */ let g_keyStates = {
@@ -117,17 +130,26 @@ var FSHADER_SOURCE = `
 
 // Add this near the other global variables
 let g_eyeOfCthulhu = null;
-let g_eyeEnabled = true;
+let g_eyeEnabled = false;  // Start with the eye disabled
+let g_wallCube = new Cube(); // Create cube once for reuse
 
 const MAP_SIZE = 64;
+const WALL_HEIGHT = 8; // Height of the perimeter wall
+
+// Add these with the other global variables at the top
+let g_noiseStartX = 0;
+let g_noiseStartZ = 0;
+let g_noiseScale = 20; // Add a global scale variable
+const g_noiseStep = 1; // Per-block step
 
 function main() {
+  noise.seed(Math.random()); // Only seed once here!
   setupWebGL();
   connectVariablesToGLSL();
   addActionForHtmlUI();
   setupMouseControl(); 
   setupKeyControls();
-  createTerrain();
+  createMap();
 
   // Initialize camera
   g_camera = new Camera();
@@ -233,6 +255,21 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_Sampler1');
     return false;
   }
+  u_Sampler2 = gl.getUniformLocation(gl.program, 'u_Sampler2');
+  if (!u_Sampler2) {
+    console.log('Failed to get the storage location of u_Sampler2');
+    return false;
+  }
+  u_Sampler3 = gl.getUniformLocation(gl.program, 'u_Sampler3');
+  if (!u_Sampler3) {
+    console.log('Failed to get the storage location of u_Sampler3');
+    return false;
+  }
+  u_Sampler4 = gl.getUniformLocation(gl.program, 'u_Sampler4');
+  if (!u_Sampler4) {
+    console.log('Failed to get the storage location of u_Sampler4');
+    return false;
+  }
 
   // Set the matrix to identity
   var identityMatrix = new Matrix4(); 
@@ -248,6 +285,18 @@ function initTexture() {
   var image1 = new Image();
   image1.onload = function(){ sendTextureToGLSL(image1, 1, u_Sampler1); };
   image1.src = 'textures/grass_top.jpg';
+
+  var image2 = new Image();
+  image2.onload = function(){ sendTextureToGLSL(image2, 2, u_Sampler2); };
+  image2.src = 'textures/cobble.png';
+
+  var image3 = new Image();
+  image3.onload = function(){ sendTextureToGLSL(image3, 3, u_Sampler3); };
+  image3.src = 'textures/stone.png';
+
+  var image4 = new Image();
+  image4.onload = function(){ sendTextureToGLSL(image4, 4, u_Sampler4); };
+  image4.src = 'textures/andesite.png';
 
   return true;
 }
@@ -302,6 +351,35 @@ function addActionForHtmlUI() {
   document.getElementById("angleSlide").addEventListener("input", function() {
     g_globalAngle = this.value; renderScene();
   });
+
+  // Noise Offset Slider Events (Coding Train style)
+  const noiseXSlider = document.getElementById("noiseOffsetXSlide");
+  if (noiseXSlider) {
+    noiseXSlider.addEventListener("input", function() {
+      g_noiseStartX = parseFloat(this.value);
+      createMap();
+      renderScene();
+    });
+  }
+
+  const noiseZSlider = document.getElementById("noiseOffsetZSlide");
+  if (noiseZSlider) {
+    noiseZSlider.addEventListener("input", function() {
+      g_noiseStartZ = parseFloat(this.value);
+      createMap();
+      renderScene();
+    });
+  }
+
+  // Scale slider
+  const noiseScaleSlider = document.getElementById("noiseScaleSlide");
+  if (noiseScaleSlider) {
+    noiseScaleSlider.addEventListener("input", function() {
+      g_noiseScale = parseFloat(this.value);
+      createMap();
+      renderScene();
+    });
+  }
 
   // Animation Button Event
   document.getElementById("animationOnButton").onclick = function() { 
@@ -361,15 +439,19 @@ function setupKeyControls() {
     // Add keydown and keyup event listeners
     document.addEventListener('keydown', function(ev) {
         const key = ev.key.toLowerCase();
+        // console.log('Keydown:', key); // Debug log
         if (key in g_keyStates) {
             g_keyStates[key] = true;
+            // console.log('g_keyStates after keydown:', g_keyStates); // Debug log
         }
     });
 
     document.addEventListener('keyup', function(ev) {
         const key = ev.key.toLowerCase();
+        // console.log('Keyup:', key); // Debug log
         if (key in g_keyStates) {
             g_keyStates[key] = false;
+            // console.log('g_keyStates after keyup:', g_keyStates); // Debug log
         }
     });
 }
@@ -414,7 +496,6 @@ function keydown(ev) {
   } else {
     return; // Prevent the default action for other keys
   }
-
   renderScene();
 }
 
@@ -446,17 +527,9 @@ function setModelBaseMatrix() {
 function renderScene() {
   var startTime = performance.now();
   
-  var projMat = new Matrix4();
-  projMat.setPerspective(g_camera.fov, canvas.width/canvas.height, 0.1, 1000);
-  gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
-
-  var viewMat = new Matrix4();
-  viewMat.setLookAt(
-    g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2],
-    g_camera.at.elements[0],  g_camera.at.elements[1],  g_camera.at.elements[2],
-    g_camera.up.elements[0],  g_camera.up.elements[1],  g_camera.up.elements[2]
-  );
-  gl.uniformMatrix4fv(u_ViewMatrix, false, viewMat.elements);
+  // Use camera's matrices instead of recalculating
+  gl.uniformMatrix4fv(u_ProjectionMatrix, false, g_camera.projectionMatrix.elements);
+  gl.uniformMatrix4fv(u_ViewMatrix, false, g_camera.viewMatrix.elements);
 
   setCameraMatrix();
   setModelBaseMatrix();
@@ -500,6 +573,7 @@ function renderScene() {
 
 function drawMap() {
   let wall = new Cube();
+  // Draw terrain
   for (let x = 0; x < MAP_SIZE; x++) {
     for (let z = 0; z < MAP_SIZE; z++) {
       let height = g_map[x][z];
@@ -516,21 +590,19 @@ function drawMap() {
   }
 }
 
-function createTerrain() {
-  noise.seed(Math.random());
+function createMap() {
   const width = MAP_SIZE;
   const depth = MAP_SIZE;
-  const scale = 35; // Higher = smoother/flatter terrain
-  const heightScale = 8; // Maximum height of walls, more variety
+  const heightScale = 8;
+  const minHeight = 1;
   g_map = Array(width).fill().map(() => Array(depth).fill(0));
-  for (let x = 0; x < width; x++) {
-    for (let z = 0; z < depth; z++) {
-      let value = noise.simplex2(x / scale, z / scale);
-      let height = Math.floor((value + 1) / 2 * heightScale);
+  for (let z = 0; z < depth; z++) {
+    for (let x = 0; x < width; x++) {
+      let value = noise.simplex2((x + g_noiseStartX) / g_noiseScale, (z + g_noiseStartZ) / g_noiseScale);
+      let height = Math.max(minHeight, Math.floor((value + 1) / 2 * heightScale));
       g_map[x][z] = height;
     }
   }
-  console.log("Terrain generated:", g_map.length, "x", g_map[0].length, "map");
 }
 
 
@@ -564,7 +636,7 @@ function getTargetBlock(camera, maxDistance = 5.0, step = 0.05) {
         let blockHeight = g_map[mapX][mapZ] * 0.5;
         // Check if y is just below the top of the stack
         if (y < blockHeight + 0.25 && y > blockHeight - 0.25 && g_map[mapX][mapZ] > 0) {
-            console.log('Targeting block at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
+            // console.log('Targeting block at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
             return { mapX, mapZ, blockHeight };
         }
     }
@@ -587,175 +659,84 @@ function getTargetEmpty(camera, maxDistance = 5.0, step = 0.05) {
         let blockHeight = g_map[mapX][mapZ] * 0.5;
         // Check if y is just above the top of the stack
         if (y > blockHeight + 0.25) {
-            console.log('Targeting empty at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
+            // console.log('Targeting empty at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
             return { mapX, mapZ, blockHeight };
         }
     }
     return null;
 }
 
-function intbound(s, ds) {
-    if (ds < 0) {
-        return intbound(-s, -ds);
+function simpleRaycast(camera, maxDistance = 5, step = 0.1) {
+  let dir = new Vector3(camera.at.elements);
+  dir.sub(camera.eye);
+  dir.normalize();
+  let pos = new Vector3(camera.eye.elements);
+
+  for (let t = 0; t < maxDistance; t += step) {
+    let check = new Vector3(pos.elements);
+    let stepVec = new Vector3(dir.elements).mul(t);
+    check.add(stepVec);
+
+    let mapX = Math.floor(check.elements[0] + MAP_SIZE / 2);
+    let mapZ = Math.floor(check.elements[2] + MAP_SIZE / 2);
+
+    if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) break;
+
+    if (g_map[mapX][mapZ] > 0) {
+      return { mapX, mapZ };
+    }
+  }
+  return null;
+}
+
+function simpleRaycastWithEmpty(camera, maxDistance = 10, step = 0.1) {
+  let dir = new Vector3(camera.at.elements);
+  dir.sub(camera.eye);
+  dir.normalize();
+  let pos = new Vector3(camera.eye.elements);
+
+  // Debug: log camera position and direction
+  console.log("Camera eye:", camera.eye.elements, "Camera at:", camera.at.elements, "Dir:", dir.elements);
+
+  let lastEmpty = null;
+
+  for (let t = 0; t < maxDistance; t += step) {
+    let check = new Vector3(pos.elements);
+    let stepVec = new Vector3(dir.elements).mul(t);
+    check.add(stepVec);
+
+    let mapX = Math.floor(check.elements[0] + MAP_SIZE / 2);
+    let mapZ = Math.floor(check.elements[2] + MAP_SIZE / 2);
+
+    if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) break;
+
+    if (g_map[mapX][mapZ] > 0) {
+      // Debug
+      console.log("Hit block at", mapX, mapZ, "lastEmpty", lastEmpty);
+      return { mapX, mapZ, lastEmpty };
     } else {
-        s = mod(s, 1);
-        return (1 - s) / ds;
+      lastEmpty = { mapX, mapZ };
     }
-}
-
-function mod(value, modulus) {
-    return ((value % modulus) + modulus) % modulus;
-}
-
-function ddaRaycast(camera, maxDistance = 5.0) {
-    // Get camera position and direction
-    let pos = new Vector3(camera.eye.elements);
-    let dir = new Vector3(camera.at.elements);
-    dir.sub(camera.eye);
-    dir.normalize();
-
-    console.log("Raycast from:", pos.elements, "direction:", dir.elements);
-
-    // Convert to grid coordinates
-    let x = pos.elements[0] + 16;
-    let y = pos.elements[1];
-    let z = pos.elements[2] + 16;
-
-    // Calculate step direction
-    let stepX = dir.elements[0] > 0 ? 1 : -1;
-    let stepY = dir.elements[1] > 0 ? 1 : -1;
-    let stepZ = dir.elements[2] > 0 ? 1 : -1;
-
-    // Calculate tMax and tDelta for each axis
-    let tMaxX = intbound(x, dir.elements[0]);
-    let tMaxY = intbound(y, dir.elements[1]);
-    let tMaxZ = intbound(z, dir.elements[2]);
-    let tDeltaX = Math.abs(1 / dir.elements[0]);
-    let tDeltaY = Math.abs(1 / dir.elements[1]);
-    let tDeltaZ = Math.abs(1 / dir.elements[2]);
-
-    // Current grid position
-    let mapX = Math.floor(x);
-    let mapY = Math.floor(y);
-    let mapZ = Math.floor(z);
-
-    console.log("Starting grid position:", mapX, mapY, mapZ);
-
-    // Track which axis we're moving along
-    let lastStep = -1;
-
-    for (let t = 0; t < maxDistance;) {
-        // Check if we're in bounds
-        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) {
-            console.log("Out of bounds:", mapX, mapZ);
-            break;
-        }
-        
-        // Check if we're at a valid height
-        if (mapY >= 0 && mapY < 4) {
-            let blockHeight = g_map[mapX][mapZ];
-            if (blockHeight > 0) {
-                // Convert block height to world coordinates
-                let worldHeight = blockHeight * 0.5;
-                // Check if we're at the right height for this block
-                if (Math.abs(y - worldHeight) < 0.25) {
-                    console.log("Hit block at:", mapX, mapZ, "height:", worldHeight, "face:", lastStep);
-                    return { 
-                        mapX, 
-                        mapZ, 
-                        mapY: Math.floor(worldHeight * 2), // Convert back to block height
-                        face: lastStep // 0=X, 1=Y, 2=Z
-                    };
-                }
-            }
-        }
-
-        // Find the next intersection
-        if (tMaxX < tMaxY && tMaxX < tMaxZ) {
-            t = tMaxX;
-            tMaxX += tDeltaX;
-            mapX += stepX;
-            lastStep = 0;
-        } else if (tMaxY < tMaxZ) {
-            t = tMaxY;
-            tMaxY += tDeltaY;
-            mapY += stepY;
-            lastStep = 1;
-        } else {
-            t = tMaxZ;
-            tMaxZ += tDeltaZ;
-            mapZ += stepZ;
-            lastStep = 2;
-        }
-    }
-    console.log("No block hit");
-    return null;
+  }
+  // Debug
+  console.log("No block hit, lastEmpty", lastEmpty);
+  return null;
 }
 
 function addBlockInFront(camera) {
-    let hit = ddaRaycast(camera);
-    if (!hit) {
-        console.log("No block hit for adding");
-        return;
-    }
-    
-    let { mapX, mapZ, mapY, face } = hit;
-    console.log("Adding block near:", mapX, mapZ, "face:", face);
-    
-    // Get direction from camera
-    let dir = new Vector3(camera.at.elements);
-    dir.sub(camera.eye);
-    dir.normalize();
-    
-    // Calculate the position for the new block based on which face was hit
-    let newX = mapX;
-    let newZ = mapZ;
-    
-    // Move in the direction of the face that was hit
-    if (face === 0) { // X face
-        newX += (dir.elements[0] > 0 ? 1 : -1);
-    } else if (face === 1) { // Y face
-        // For Y faces, we want to place on top of the current stack
-        if (g_map[mapX][mapZ] < 4) {
-            g_map[mapX][mapZ] += 1;
-            console.log('Added block on top at', mapX, mapZ, 'new height:', g_map[mapX][mapZ]);
-        }
-        return;
-    } else if (face === 2) { // Z face
-        newZ += (dir.elements[2] > 0 ? 1 : -1);
-    }
-    
-    // Check if the new position is valid
-    if (newX < 0 || newX >= 32 || newZ < 0 || newZ >= 32) {
-        console.log("Invalid position for new block:", newX, newZ);
-        return;
-    }
-    
-    // Place block at the new position
-    if (g_map[newX][newZ] < 4) {
-        g_map[newX][newZ] += 1;
-        console.log('Added block at', newX, newZ, 'new height:', g_map[newX][newZ]);
-    } else {
-        console.log("Stack height limit reached at", newX, newZ);
-    }
+  let hit = simpleRaycastWithEmpty(camera);
+  if (hit && hit.lastEmpty) {
+    console.log("Adding block at", hit.lastEmpty.mapX, hit.lastEmpty.mapZ);
+    g_map[hit.lastEmpty.mapX][hit.lastEmpty.mapZ] += 1;
+  }
 }
 
 function deleteBlockInFront(camera) {
-    let hit = ddaRaycast(camera);
-    if (!hit) {
-        console.log("No block hit for deletion");
-        return;
+  let hit = simpleRaycastWithEmpty(camera);
+  if (hit) {
+    console.log("Deleting block at", hit.mapX, hit.mapZ);
+    if (g_map[hit.mapX][hit.mapZ] > 1) {
+      g_map[hit.mapX][hit.mapZ] -= 1;
     }
-    
-    let { mapX, mapZ, mapY } = hit;
-    console.log("Attempting to delete block at:", mapX, mapZ, "height:", mapY);
-    
-    // Only delete if there's a block to delete and we're looking at it
-    let blockHeight = g_map[mapX][mapZ] * 0.5;
-    if (g_map[mapX][mapZ] > 0 && Math.abs(mapY - blockHeight) < 0.25) {
-        g_map[mapX][mapZ] -= 1;
-        console.log('Deleted block at', mapX, mapZ, 'new height:', g_map[mapX][mapZ]);
-    } else {
-        console.log("No block to delete at", mapX, mapZ);
-    }
+  }
 }
