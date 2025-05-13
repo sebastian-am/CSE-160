@@ -60,32 +60,15 @@ class Cube {
       this.cubeUVs = new Float32Array(Cube.defaultUVs);
     }
 
-    // render this shape
-    render(){
-        // Pass the texture number to u_whichTexture
-        gl.uniform1i(u_whichTexture, this.textureNum);
-        
-        // Pass the color to u_FragColor
-        gl.uniform4f(u_FragColor, this.color[0], this.color[1], this.color[2], this.color[3]);
-        
-        // Pass the matrix to u_ModelMatrix attribute
-        gl.uniformMatrix4fv(u_ModelMatrix, false, this.matrix.elements);
-        var matrix = this.matrix;
-        drawCube(matrix, this.color);
-    }
+
     renderFast(){
-        // Pass the texture number to u_whichTexture
         gl.uniform1i(u_whichTexture, this.textureNum);
-        
-        // Pass the color to u_FragColor
         gl.uniform4f(u_FragColor, this.color[0], this.color[1], this.color[2], this.color[3]);
         
-        // Pass the matrix to u_ModelMatrix attribute
         gl.uniformMatrix4fv(u_ModelMatrix, false, this.matrix.elements);
 
         initTriangle();
         gl.bufferData(gl.ARRAY_BUFFER, this.cubeVerts, gl.DYNAMIC_DRAW);
-        
         initTriangleUV();
         gl.bufferData(gl.ARRAY_BUFFER, this.cubeUVs, gl.DYNAMIC_DRAW);
 
@@ -95,7 +78,7 @@ class Cube {
     }
 
     setGrassBlockUVs() {
-        const u0 = 0.0 + 0.02; // ≈ 0.02
+        const u0 = 0.0 + 0.02; 
         const u1 = 86 / 256 - 0.02;      // ≈ 0.334
         const u2 = 172 / 256;   // ≈ 0.672
         const u3 = 1.0;
@@ -122,7 +105,6 @@ class Cube {
             // Back (side)
             u0,v0,  u1,v0,   u1,v1,
             u0,v0,   u1,v1,   u0,v1,
-
         ]);
     }
 }

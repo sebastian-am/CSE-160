@@ -1,4 +1,5 @@
-const PLAYER_RADIUS = 0.25; // Half a block wide
+// Sebastian Morgese
+// smorgese@ucsc.edu
 
 // Speed configuration
 const SPEEDS = {
@@ -33,7 +34,7 @@ class Camera {
         this.projectionMatrix.setPerspective(this.fov, canvas.width/canvas.height, 0.1, 1000);
     }
 
-    // // Crisp, simple block collision with player radius
+    // // Tried and failed to imlement collision detection
     // isBlocked(x, y, z) {
     //     // Check 4 points around the player (N, S, E, W) at the player's feet/center
     //     const checks = [
@@ -132,13 +133,12 @@ class Camera {
     }
 
     tiltUp(alpha) { 
-        // Compute forward vector
-        let f = new Vector3();
+        let f = new Vector3(); // Forward vector
         f.set(this.at);
         f.sub(this.eye);
-        // Compute right vector (side)
-        let s = Vector3.cross(f, this.up);
+        let s = Vector3.cross(f, this.up); // Right vector
         s.normalize();
+
         // Rotate forward vector around right vector
         let rotationMatrix = new Matrix4();
         rotationMatrix.setRotate(alpha * SPEEDS.ROTATE, s.elements[0], s.elements[1], s.elements[2]);
