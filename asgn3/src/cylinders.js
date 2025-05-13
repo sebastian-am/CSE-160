@@ -2,7 +2,6 @@
 // smorgese@ucsc.edu
 
 class Cylinder {
-    // constructor
     constructor() {
       this.type = 'cylinder';
       this.color = [1.0, 1.0, 1.0, 1.0]; 
@@ -11,7 +10,6 @@ class Cylinder {
       this.matrix = new Matrix4();
     }
   
-    // render this shape
     render(){
         var rgba = this.color;
         var segments = this.segments;

@@ -1,10 +1,6 @@
 <!-- 
 Sebastian Morgese
 smorgese@ucsc.edu
-
-Notes to Grader:
- - I've include a dropdown menu at the bottom of the page that links to external sources I've used for the assignment.
- - I tried to make the Eye of Cthulhu from Terraria :). 
 -->
 
 <!DOCTYPE html>
@@ -33,7 +29,7 @@ Notes to Grader:
   <table width="100%">
     <tr>
       <!-- Left: Controls/Sliders/Buttons -->
-      <td valign="top" style="width:90%">
+      <td valign="top" style="width:20%">
         <section>
           <strong>World Controls:</strong>
           <p>
@@ -45,12 +41,12 @@ Notes to Grader:
             <input type="range" min="-200" max="200" value="0" step="1" class="slider" id="noiseOffsetZSlide" />
           </p>
           <p>
-            Noise Scale:
+            Noise Scale: &nbsp &nbsp  
             <input type="range" min="22" max="100" value="22" step="1" class="slider" id="noiseScaleSlide" />
           </p>
           <p>
             Toggle Eye of Cthulhu:
-            <button id="toggleEyeBtn">Call the Eye</button>
+            <button id="toggleEyeBtn">Summon the Eye</button>
           </p>
           <p>
             Toggle Particles:
@@ -59,21 +55,20 @@ Notes to Grader:
         </section>
       </td>
 
-      <!-- Right: Controls Panel -->
-      <td valign="top" style="width:8%">
-          <strong>Controls:</strong>
-          <ul style="padding-left: 1em;">
-            <li><b>WASD</b>: Move</li>
-            <li><b>Q</b>: Pan Left</li>
-            <li><b>E</b>: Pan Right</li>
-            <li><b>Space</b>: Up</li>
-            <li><b>Ctrl</b>: Down</li>
-            <li><b>Shift</b>: Sprint</li>
-            <li><b>Mouse</b>: Look</li>
-            <li><b>F</b>: Add Block</li>
-            <li><b>G</b>: Delete Block</li>
-          </ul>
-        </div>
+      <!-- Right: Player Controls -->
+      <td valign="top" style="width:80%">
+        <strong>Player Controls:</strong>
+        <ul style="padding-left: 1em;">
+          <li><b>WASD</b>: Move</li>
+          <li><b>Q</b>: Pan Left</li>
+          <li><b>E</b>: Pan Right</li>
+          <li><b>Space</b>: Up</li>
+          <li><b>Ctrl</b>: Down</li>
+          <li><b>Shift</b>: Sprint</li>
+          <li><b>Mouse</b>: Look</li>
+          <li><b>F</b>: Add Block</li>
+          <li><b>G</b>: Delete Block</li>
+        </ul>
       </td>
     </tr>
   </table>
@@ -89,27 +84,47 @@ Notes to Grader:
       <option value="https://github.com/josephg/noisejs/blob/master/perlin.js">
         [link] josephg/noisejs - Perlin noise lib
       </option>
-      <option value="https://www.planetminecraft.com/texture-pack/dirtcraft-16x/">
-        [link] PMC - Dirt texture
+      <option value="https://minecraft.fandom.com/wiki/List_of_block_textures">
+        [link] Wiki - Sand texture
       </option>
       <option value="https://www.pinpng.com/picture/TRiJwRh_creeper-texture-png-diy-minecraft-grass-block-transparent/">
         [link] Pinpng - Grass texture
       </option>
-      <option value="https://en.wikipedia.org/wiki/Ray_casting">
-        [link] Wiki - Ray casting referenece
+      <option value="https://webglfundamentals.org/webgl/lessons/webgl-3d-textures.html">
+        [link] WebGL Fundamentals - Textures and UV Mapping
+      </option>
+      <option value="https://learnopengl.com/Advanced-OpenGL/Blending">
+        [link] LearnOpenGL - Blending and Transparency
+      </option>
+      <option value="https://developer.mozilla.org/en-US/docs/Web/API/Pointer_Lock_API">
+        [link] MDN - Pointer Lock API
+      </option>
+      <option value="">
+        [info] ChatGPT – Helped convert camera from "orbiting mode" to a first-person player view
       </option>
       <option value="">
         [info] ChatGPT - Helped develop and debug the Eye of Cthulhu update() and render() functions
       </option>
+      <option value="">
+        [info] ChatGPT - Helped debug my add/break block funcitons
+      </option> 
     </select>
   </section>
 
   <!-- Notes to Grader -->
   <section class="grader-notes" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px;">
-    <Strong style="margin-top: 0;">Notes to Grader:</Strong>
-      <li><Strong>Story:</Strong> You have to keep away from the Eye of Cthulhu, who's always chasing you. </li>
-      <li><Strong>Wow:</Strong> Noise-based terrain generation (with some controls), simple billboarded particle system (emitting from the eye), eye tenrals sway with turning  </li>
-      <li> Excuse the white artifacting on the grass blocks, I had a bad base texture and there was bleeding issues with the mipmapping. </li>
+    <Strong>Notes to Grader:</Strong>
+    <ul>
+      <li><Strong>Story:</Strong> You have to keep away from the Eye of Cthulhu, who's always chasing you (upon pressing the toggle button). The eye follows you around the procedurally generated terrain, creating a tense atmosphere.</li>
+      <li><Strong>Wow Factors:</Strong>
+        <ul>
+          <li>Procedural terrain generation using Simplex noise (with controls for offset and scale)</li>
+          <li>Simple particle system with billboarding that emits from the eye's surface</li>
+          <li>Semi-realistic tendril movement that sways based on the eye's turning direction</li>
+        </ul>
+      </li>
+      <li>There's some white artifacting on the grass blocks due to texture bleeding issues from mipmapping. This was caused by using a less-than-ideal base texture.</li>
+      <li>Any blocks placed must be over the 32x32 map area. </li>
     </ul>
   </section>
 

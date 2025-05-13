@@ -1,2 +1,0 @@
-- Figure out what to do shading
-- WOW (collision? lighting?, etc.)

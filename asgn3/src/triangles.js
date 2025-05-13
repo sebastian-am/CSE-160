@@ -8,7 +8,6 @@ let triangle3DUVBuffer = null;
 let uvBuffer = null;
 
 class Triangle {
-  // constructor
   constructor() {
     this.type = 'triangle';
     this.position = [0.0, 0.0, 0.0];
@@ -43,15 +42,10 @@ function drawTriangle(vertices) {
     return -1;
   }
 
-  // Bind the buffer object to target
   gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);
-  // Write date into the buffer object
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
 
-  // Assign the buffer object to a_Position variable
   gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
-
-  // Enable the assignment to a_Position variable when drawning triangles
   gl.enableVertexAttribArray(a_Position);
 
   gl.drawArrays(gl.TRIANGLES, 0, n);
@@ -88,14 +82,10 @@ function initTriangleUV() {
 
 function drawTriangle3D(vertices) { 
   var n = vertices.length / 3; 
-  // Create a buffer object
 
   initTriangle();
 
-  
-  // Write date into the buffer object
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
-  
   gl.drawArrays(gl.TRIANGLES, 0, n);
 
   gl.disableVertexAttribArray(a_Position); // Disable the assignment to a_Position variable when drawing points
@@ -112,15 +102,10 @@ function drawTriangle3DUV(vertices, uv) {
     return -1;
   }
 
-  // Bind the buffer object to target
   gl.bindBuffer(gl.ARRAY_BUFFER, triangle3DUVBuffer);
-  // Write date into the buffer object
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
 
-  // Assign the buffer object to a_Position variable
   gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
-
-  // Enable the assignment to a_Position variable when drawning triangles
   gl.enableVertexAttribArray(a_Position);
 
   if (uvBuffer == null) {
@@ -132,11 +117,9 @@ function drawTriangle3DUV(vertices, uv) {
   }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
-
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uv), gl.DYNAMIC_DRAW);
 
   gl.vertexAttribPointer(a_UV, 2, gl.FLOAT , false, 0, 0);
-
   gl.enableVertexAttribArray(a_UV);
 
   gl.drawArrays(gl.TRIANGLES, 0, n);

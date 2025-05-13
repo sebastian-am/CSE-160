@@ -64,9 +64,6 @@ var FSHADER_SOURCE = `
 /** @type {WebGLUniformLocation} */ let u_ProjectionMatrix = null;
 /** @type {WebGLUniformLocation} */ let u_Sampler0 = null;
 /** @type {WebGLUniformLocation} */ let u_Sampler1 = null;
-/** @type {WebGLUniformLocation} */ let u_Sampler2 = null;
-/** @type {WebGLUniformLocation} */ let u_Sampler3 = null;
-/** @type {WebGLUniformLocation} */ let u_Sampler4 = null;
 /** @type {WebGLUniformLocation} */ let u_whichTexture = null;
 
 /** Map Constants **/
@@ -100,13 +97,9 @@ const g_noiseStep = 1;  // Per-block step for noise generation
 /** @type {number} */ let g_seconds = performance.now()/1000.0-g_startTime; 
 
 /** Scene Objects **/
-/** @type {Cube[]} */ let g_voxelCubes = [];
-/** @type {Matrix4} */ let g_voxelBaseMatrix = new Matrix4();
 /** @type {Camera} */ let g_camera = null;
 /** @type {number[][]} */ let g_map = [];
-/** @type {number[][]} */ let g_textureMap = [];
 /** @type {EyeOfCthulhu} */ let g_eyeOfCthulhu = null;
-/** @type {Cube} */ let g_wallCube = new Cube();
 /** @type {number[][][]} */ let g_placedBlocks = Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill().map(() => []));
 
 /** Key State Tracking **/
@@ -131,40 +124,22 @@ function main() {
   setupKeyControls();
   createMap();
 
-  // Initialize camera
+  // Intialize external objects
   g_camera = new Camera();
-
-  // Initialize Eye of Cthulhu
   g_eyeOfCthulhu = new EyeOfCthulhu();
 
   document.onkeydown = keydown; // Register the keydown event handler
-  document.onkeyup = keyup; // Add this line
   
   initTexture(); // Initialize texture
 
   // Specify the color for clearing <canvas>
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
-
-  // Clear <canvas>
   requestAnimationFrame(tick); // Start the animation
-
-  document.addEventListener('DOMContentLoaded', function() {
-    const btn = document.getElementById('toggleEyeBtn');
-    if (btn) {
-      btn.onclick = function() {
-        g_eyeEnabled = !g_eyeEnabled;
-        btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
-      };
-      btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
-    }
-  });
 }
 
 function setupWebGL() {
-  // Retrieve <canvas> element
   canvas = document.getElementById('webgl');
 
-  // Get the rendering context for WebGL
   gl = canvas.getContext('webgl', {preserveDrawingBuffer: true}); 
   if (!gl) {
     console.log('Failed to get the rendering context for WebGL');
@@ -235,27 +210,11 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_Sampler1');
     return false;
   }
-  u_Sampler2 = gl.getUniformLocation(gl.program, 'u_Sampler2');
-  if (!u_Sampler2) {
-    console.log('Failed to get the storage location of u_Sampler2');
-    return false;
-  }
-  u_Sampler3 = gl.getUniformLocation(gl.program, 'u_Sampler3');
-  if (!u_Sampler3) {
-    console.log('Failed to get the storage location of u_Sampler3');
-    return false;
-  }
-  u_Sampler4 = gl.getUniformLocation(gl.program, 'u_Sampler4');
-  if (!u_Sampler4) {
-    console.log('Failed to get the storage location of u_Sampler4');
-    return false;
-  }
 
   // Set the matrix to identity
   var identityMatrix = new Matrix4(); 
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityMatrix.elements);
 }
-
 
 function initTexture() {
   var image0 = new Image();
@@ -264,19 +223,7 @@ function initTexture() {
 
   var image1 = new Image();
   image1.onload = function(){ sendTextureToGLSL(image1, 1, u_Sampler1); };
-  image1.src = 'textures/grass_top.jpg';
-
-  var image2 = new Image();
-  image2.onload = function(){ sendTextureToGLSL(image2, 2, u_Sampler2); };
-  image2.src = 'textures/cobble.png';
-
-  var image3 = new Image();
-  image3.onload = function(){ sendTextureToGLSL(image3, 3, u_Sampler3); };
-  image3.src = 'textures/dirt.png';
-
-  var image4 = new Image();
-  image4.onload = function(){ sendTextureToGLSL(image4, 4, u_Sampler4); };
-  image4.src = 'textures/sand.png';
+  image1.src = 'textures/sand.png';
 
   return true;
 }
@@ -309,40 +256,33 @@ function sendTextureToGLSL(image, textureUnitIndex, samplerUniform) {
 //===============================================
 
 function addActionForHtmlUI() {
-  // Noise Offset Slider Events (Coding Train style)
-  const noiseXSlider = document.getElementById("noiseOffsetXSlide");
-  if (noiseXSlider) {
-    noiseXSlider.addEventListener("input", function() {
-      g_noiseStartX = parseFloat(this.value);
-      createMap();
-      renderScene();
-    });
-  }
+  // Noise Offset and Scale Sliders
+  const sliders = {
+    "noiseOffsetXSlide": (value) => { g_noiseStartX = parseFloat(value); },
+    "noiseOffsetZSlide": (value) => { g_noiseStartZ = parseFloat(value); },
+    "noiseScaleSlide": (value) => { g_noiseScale = parseFloat(value); }
+  };
 
-  const noiseZSlider = document.getElementById("noiseOffsetZSlide");
-  if (noiseZSlider) {
-    noiseZSlider.addEventListener("input", function() {
-      g_noiseStartZ = parseFloat(this.value);
-      createMap();
-      renderScene();
-    });
-  }
-
-  // Scale slider
-  const noiseScaleSlider = document.getElementById("noiseScaleSlide");
-  if (noiseScaleSlider) {
-    noiseScaleSlider.addEventListener("input", function() {
-      g_noiseScale = parseFloat(this.value);
-      createMap();
-      renderScene();
-    });
-  }
+  // Add event listeners for all sliders
+  Object.entries(sliders).forEach(([id, callback]) => {
+    const slider = document.getElementById(id);
+    if (slider) {
+      slider.addEventListener("input", function() {
+        callback(this.value);
+        createMap();
+        renderScene();
+      });
+    }
+  });
 
   // Toggle Eye of Cthulhu
-  document.getElementById("toggleEyeBtn").onclick = function() {
-    g_eyeEnabled = !g_eyeEnabled;
-    this.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
-  };
+  const eyeBtn = document.getElementById("toggleEyeBtn");
+  if (eyeBtn) {
+    eyeBtn.onclick = function() {
+      g_eyeEnabled = !g_eyeEnabled;
+      this.textContent = g_eyeEnabled ? 'Hide Eye' : 'Summon the Eye';
+    };
+  }
 
   // Toggle Particles
   const particleBtn = document.getElementById("toggleParticlesBtn");
@@ -351,7 +291,6 @@ function addActionForHtmlUI() {
       g_particlesEnabled = !g_particlesEnabled;
       this.textContent = g_particlesEnabled ? 'Disable Particles' : 'Enable Particles';
     };
-    // Set initial text
     particleBtn.textContent = g_particlesEnabled ? 'Disable Particles' : 'Enable Particles';
   }
 }
@@ -378,9 +317,8 @@ function setupMouseControl() {
   }
 
   function updateCameraLook(ev) {
-    if (!g_camera) return; // Add safety check
-    
-    const sensitivity = 0.4; // degrees per pixel (twice as fast)
+    if (!g_camera) return; 
+    const sensitivity = 0.4; // degrees per pixel
     if (ev.movementX !== 0) {
       g_camera.panLeft(-ev.movementX * sensitivity);
     }
@@ -441,7 +379,7 @@ function tick() {
 }
 
 function keydown(ev) {
-  // Only handle F and G keys here, movement is handled in tick()
+  // Only handle F and G keys here, moved movement to tick()
   if (ev.keyCode == 70) { // F key
     addBlockAtCamera(g_camera);
   } else if (ev.keyCode == 71) { // G key
@@ -450,10 +388,6 @@ function keydown(ev) {
     return; // Prevent the default action for other keys
   }
   renderScene();
-}
-
-function keyup(ev) {
-    // No need to do anything here, key states are handled in setupKeyControls
 }
 
 //===============================================
@@ -471,14 +405,12 @@ function setCameraMatrix() {
 
 function setModelBaseMatrix() {
   let baseMatrix = new Matrix4();
-  // No need for any transformations here since we're using the global rotation matrix
   g_voxelBaseMatrix = baseMatrix;
 }
 
 function renderScene() {
   var startTime = performance.now();
   
-  // Use camera's matrices instead of recalculating
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, g_camera.projectionMatrix.elements);
   gl.uniformMatrix4fv(u_ViewMatrix, false, g_camera.viewMatrix.elements);
 
@@ -497,17 +429,17 @@ function renderScene() {
 
   // 2. Draw all opaque objects (blocks, Eye, etc.)
   drawMap();
-  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.render(g_camera.eye.elements, g_seconds);
+  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.render(g_camera.eye.elements);
 
   // 3. Draw transparent floor last
-  // Ensure blending is enabled for water
+  // Ensure blending is enabled even if Eye is enabled
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   
   // Draw the floor
   var floor = new Cube();
   floor.color = [0.02, 0.0, 1.0, 0.8];
-  floor.textureNum = -2; // Use texture -2 (color)
+  floor.textureNum = -2; // Color
   floor.matrix.setIdentity();
   floor.matrix.translate(0.0, 0.63, 0.0); 
   floor.matrix.scale(32.0, 0.001, 32.0); 
@@ -524,7 +456,7 @@ function renderScene() {
 //===============================================
 
 function drawMap() {
-  let wall = new Cube(); // Only create once!
+  let wall = new Cube(); // Call once for performance :D
   // Draw terrain
   for (let x = 0; x < MAP_SIZE; x++) {
     for (let z = 0; z < MAP_SIZE; z++) {
@@ -534,7 +466,7 @@ function drawMap() {
         let y = height - 1;
         wall.matrix.setIdentity();
         wall.color = [1.0, 1.0, 1.0, 1.0];
-        wall.textureNum = (y <= 2) ? 4 : 0; // 4 is sand, 0 is grass
+        wall.textureNum = (y <= 2) ? 1 : 0; // 1 is sand, 0 is grass
         wall.matrix.scale(0.5, 0.5, 0.5);
         let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
         let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
@@ -551,7 +483,7 @@ function drawMap() {
       for (let y of g_placedBlocks[x][z]) {
         wall.matrix.setIdentity();
         wall.color = [1.0, 1.0, 1.0, 1.0];
-        wall.textureNum = (y <= 2) ? 4 : 0;
+        wall.textureNum = (y <= 2) ? 1 : 0;
         wall.matrix.scale(0.5, 0.5, 0.5);
         let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
         let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
@@ -580,8 +512,8 @@ function createMap() {
       // Convert map coordinates back to world coordinates for noise
       let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
       let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
-      let value = noise.simplex2((worldX + g_noiseStartX) / g_noiseScale, (worldZ + g_noiseStartZ) / g_noiseScale);
-      let height = Math.max(minHeight, Math.floor((value + 1) / 2 * heightScale));
+      let value = noise.simplex2((worldX + g_noiseStartX) / g_noiseScale, (worldZ + g_noiseStartZ) / g_noiseScale); // Generate Simplex noise (-1 to 1), scale controls frequency, offset allows scrolling
+      let height = Math.max(minHeight, Math.floor((value + 1) / 2 * heightScale)); // Convert noise to height: normalize to 0-1, scale to desired range, enable min height
       g_map[x][z] = height;
     }
   }
@@ -607,9 +539,6 @@ function addBlockAtCamera(camera) {
   let dir = new Vector3(camera.at.elements);
   dir.sub(camera.eye);
   dir.normalize();
-  
-  // Calculate offsets based on direction components
-  // Account for BLOCK_SCALE in the direction
   let offsetX = 0;
   let offsetZ = 0;
   let offsetY = 0;
