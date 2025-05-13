@@ -34,9 +34,9 @@ class EyeOfCthulhu {
         // Particle system
         this.particles = [];
         this.maxParticles = 1000;
-        this.particleLifetime = 20000.0;  // 
+        this.particleLifetime = 10000.0;  // 10 seconds in milliseconds
         this.particleSpeed = 0.002;
-        this.particleSize = 0.05;
+        this.particleSize = 0.065;
         this.particleColor = [0.5, 0.0, 0.0, 0.9];
 
         // Debug log
@@ -50,7 +50,7 @@ class EyeOfCthulhu {
     }
 
     // Animate and chase the player
-    update(playerPos, deltaTime) {
+    update(playerPos, deltaTime, particlesEnabled = true) {
         // Bobbing and tilting (match original phase)
         this.bob = 0.06 * Math.sin(1.5 * deltaTime - 1.5);
         this.tilt = 7 * Math.sin(1.5 * deltaTime);
@@ -78,11 +78,14 @@ class EyeOfCthulhu {
         }
 
         // Update particles
-        this.updateParticles(deltaTime);
-
-        // Emit new particles more frequently but with lower chance
-        if (Math.random() < 0.2) { // 20% chance each frame
-            this.emitParticle();
+        if (particlesEnabled) {
+            this.updateParticles(deltaTime);
+            // Emit new particles more frequently but with lower chance
+            if (Math.random() < 0.2) { // 20% chance each frame
+                this.emitParticle();
+            }
+        } else {
+            this.particles = []; // Clear particles when disabled
         }
     }
 
@@ -195,7 +198,9 @@ class EyeOfCthulhu {
         ref2.render();
 
         // Draw particles
-        this.drawParticles();
+        if (this.particles.length > 0) {
+            this.drawParticles();
+        }
     }
 
     // --- Eye construction helpers ---
@@ -375,9 +380,10 @@ class EyeOfCthulhu {
 
     updateParticles(deltaTime) {
         // Update existing particles
+        const fixedTimeStep = 16.67; // Fixed 60fps time step in milliseconds
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
-            p.lifetime -= deltaTime;
+            p.lifetime -= fixedTimeStep;  // Use fixed time step instead of deltaTime
             
             if (p.lifetime <= 0) {
                 this.particles.splice(i, 1);

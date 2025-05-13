@@ -1,5 +1,2 @@
-
 - Figure out what to do shading
 - WOW (collision? lighting?, etc.)
-- Add multiple textures
-- Add/delete blocks

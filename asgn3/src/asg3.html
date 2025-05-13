@@ -35,60 +35,32 @@ Notes to Grader:
       <!-- Left: Controls/Sliders/Buttons -->
       <td valign="top" style="width:90%">
         <section>
-          <strong>Joint Controls:</strong>
-          <p>
-            Base:
-            <input type="range" min="-45" max="45" value="0" class="slider" id="baseTentacleSlide" />
-          </p>
-          <p>
-            Second:
-            <input type="range" min="-45" max="45" value="0" class="slider" id="secondTentacleSlide" />
-          </p>
-          <p>
-            Third:
-            <input type="range" min="-45" max="45" value="0" class="slider" id="thirdTentacleSlide" />
-          </p>
-          <p>
-            Tip:
-            <input type="range" min="-45" max="45" value="0" class="slider" id="tipTentacleSlide" />
-          </p>
-
-          <strong>Other Controls:</strong>
-          <p>
-            Camera Angle: 
-            <input type="range" min="0" max="360" value="0" class="slider" id="angleSlide" />
-          </p>
+          <strong>World Controls:</strong>
           <p>
             Noise Offset X:
-            <input type="range" min="-100" max="100" value="0" step="1" class="slider" id="noiseOffsetXSlide" />
+            <input type="range" min="-200" max="200" value="0" step="1" class="slider" id="noiseOffsetXSlide" />
           </p>
           <p>
             Noise Offset Z:
-            <input type="range" min="-100" max="100" value="0" step="1" class="slider" id="noiseOffsetZSlide" />
+            <input type="range" min="-200" max="200" value="0" step="1" class="slider" id="noiseOffsetZSlide" />
           </p>
           <p>
             Noise Scale:
-            <input type="range" min="20" max="80" value="20" step="1" class="slider" id="noiseScaleSlide" />
-          <p>
-            Animation:
-            <button type="button" id="animationOnButton">ON</button>
-            <button type="button" id="animationOffButton">OFF</button>
+            <input type="range" min="22" max="100" value="22" step="1" class="slider" id="noiseScaleSlide" />
           </p>
           <p>
             Toggle Eye of Cthulhu:
             <button id="toggleEyeBtn">Call the Eye</button>
           </p>
           <p>
-            Spinning (Cinematic) Mode: 
-            <button type="button" id="spinOnButton">ON</button>
-            <button type="button" id="spinOffButton">OFF</button>
+            Toggle Particles:
+            <button id="toggleParticlesBtn">Enable Particles</button>
           </p>
         </section>
       </td>
 
       <!-- Right: Controls Panel -->
       <td valign="top" style="width:8%">
-        <div id="controls-panel">
           <strong>Controls:</strong>
           <ul style="padding-left: 1em;">
             <li><b>WASD</b>: Move</li>
@@ -125,10 +97,20 @@ Notes to Grader:
       </option>
       <option value="https://en.wikipedia.org/wiki/Ray_casting">
         [link] Wiki - Ray casting referenece
+      </option>
       <option value="">
         [info] ChatGPT - Helped develop and debug the Eye of Cthulhu update() and render() functions
       </option>
     </select>
+  </section>
+
+  <!-- Notes to Grader -->
+  <section class="grader-notes" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px;">
+    <Strong style="margin-top: 0;">Notes to Grader:</Strong>
+      <li><Strong>Story:</Strong> You have to keep away from the Eye of Cthulhu, who's always chasing you. </li>
+      <li><Strong>Wow:</Strong> Noise-based terrain generation (with some controls), simple billboarded particle system (emitting from the eye), eye tenrals sway with turning  </li>
+      <li> Excuse the white artifacting on the grass blocks, I had a bad base texture and there was bleeding issues with the mipmapping. </li>
+    </ul>
   </section>
 
   <!-- Scripts -->
