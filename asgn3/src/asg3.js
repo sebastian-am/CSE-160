@@ -34,7 +34,7 @@ var FSHADER_SOURCE = `
     } else if (u_whichTexture == -1) {
       gl_FragColor = vec4(v_UV, 1.0, 1.0); // Use UV debugger
     } else if (u_whichTexture == 0) {
-      gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0 (dirt)
+      gl_FragColor = texture2D(u_Sampler0, v_UV); // Use texture 0 (grass)
     } else if (u_whichTexture == 1) {
       gl_FragColor = texture2D(u_Sampler1, v_UV); // Use texture 1 (grass top)
     } else if (u_whichTexture == 2) {
@@ -69,17 +69,24 @@ var FSHADER_SOURCE = `
 /** @type {WebGLUniformLocation} */ let u_Sampler4 = null;
 /** @type {WebGLUniformLocation} */ let u_whichTexture = null;
 
+/** Map Constants **/
+const MAP_SIZE = 64;  // Size of the map in blocks
+const MAP_HALF = MAP_SIZE / 2;  // Half size for centering
+const BLOCK_SCALE = 0.5;  // Scale factor for block rendering
+const WORLD_TO_MAP = 1;  // Conversion factor from world to map coordinates
+const MAP_OFFSET_X = MAP_HALF;  // X offset to center the map
+const MAP_OFFSET_Z = MAP_HALF;  // Z offset to center the map
+
+/** Noise Generation Constants **/
+const g_noiseStep = 1;  // Per-block step for noise generation
+/** @type {number} */ let g_noiseStartX = 0;  // X offset for noise generation
+/** @type {number} */ let g_noiseStartZ = 0;  // Z offset for noise generation
+/** @type {number} */ let g_noiseScale = 22;  // Scale factor for noise generation
+
 /** Animation Controls **/
 /** @type {number} */ let g_globalAngle = 0;
-/** @type {boolean} */ let g_animationOn = false;
-/** @type {boolean} */ let g_pokeAnimation = false;
-/** @type {boolean} */ let g_spinMode = false;
-/** @type {number} */ let g_totalSpin = 720;
-/** @type {number} */ let g_baseTentacleAngle = 0;
-/** @type {number} */ let g_secondTentacleAngle = 0;
-/** @type {number} */ let g_thirdTentacleAngle = 0;
-/** @type {number} */let g_tipTentacleAngle = 0;
-
+/** @type {boolean} */ let g_eyeEnabled = false;
+/** @type {boolean} */ let g_particlesEnabled = true;
 
 /** Mouse Control **/
 /** @type {boolean} */ let g_mouseDown = false;
@@ -91,30 +98,17 @@ var FSHADER_SOURCE = `
 /** Timing Variables **/
 /** @type {number} */ let g_startTime = performance.now() / 1000;
 /** @type {number} */ let g_seconds = performance.now()/1000.0-g_startTime; 
-/** @type {number} */ let g_normalBobHeight = 0;
-/** @type {number} */ let g_bobHeight = 0;
-/** @type {number} */ let g_normalTiltAngle = 0;
-/** @type {number} */ let g_tiltAngle = 0;
-/** @type {number[]} */ let g_waveAngles = [];
-/** @type {number} */ let g_segmentCount = 4;
 
 /** Scene Objects **/
 /** @type {Cube[]} */ let g_voxelCubes = [];
 /** @type {Matrix4} */ let g_voxelBaseMatrix = new Matrix4();
-/** @type {Cube[][]} */ let g_tentacleSegments = [];
 /** @type {Camera} */ let g_camera = null;
-/** @type {number[][]} */ let g_tentacleBasePositions = [
-  [0.125, -0.375, 0.375],
-  [-0.125, -0.25, 0.5],
-  [0.25,  0.0, 0.375],
-  [-0.375, -0.125, 0.375],
-  [-0.25,  0.25, 0.375],
-  [0.125, 0.25, 0.375],
-  [-0.125, 0.0, 0.5],
-];
 /** @type {number[][]} */ let g_map = [];
 /** @type {number[][]} */ let g_textureMap = [];
-  
+/** @type {EyeOfCthulhu} */ let g_eyeOfCthulhu = null;
+/** @type {Cube} */ let g_wallCube = new Cube();
+/** @type {number[][][]} */ let g_placedBlocks = Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill().map(() => []));
+
 /** Key State Tracking **/
 /** @type {Object} */ let g_keyStates = {
     'w': false,
@@ -128,22 +122,8 @@ var FSHADER_SOURCE = `
     'control': false
 };
 
-// Add this near the other global variables
-let g_eyeOfCthulhu = null;
-let g_eyeEnabled = false;  // Start with the eye disabled
-let g_wallCube = new Cube(); // Create cube once for reuse
-
-const MAP_SIZE = 64;
-const WALL_HEIGHT = 8; // Height of the perimeter wall
-
-// Add these with the other global variables at the top
-let g_noiseStartX = 0;
-let g_noiseStartZ = 0;
-let g_noiseScale = 20; // Add a global scale variable
-const g_noiseStep = 1; // Per-block step
-
 function main() {
-  noise.seed(Math.random()); // Only seed once here!
+  noise.seed(Math.random()); 
   setupWebGL();
   connectVariablesToGLSL();
   addActionForHtmlUI();
@@ -173,9 +153,9 @@ function main() {
     if (btn) {
       btn.onclick = function() {
         g_eyeEnabled = !g_eyeEnabled;
-        btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+        btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
       };
-      btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+      btn.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
     }
   });
 }
@@ -280,7 +260,7 @@ function connectVariablesToGLSL() {
 function initTexture() {
   var image0 = new Image();
   image0.onload = function(){ sendTextureToGLSL(image0, 0, u_Sampler0); };
-  image0.src = 'textures/dirt.jpg';
+  image0.src = 'textures/grass.png';
 
   var image1 = new Image();
   image1.onload = function(){ sendTextureToGLSL(image1, 1, u_Sampler1); };
@@ -292,11 +272,11 @@ function initTexture() {
 
   var image3 = new Image();
   image3.onload = function(){ sendTextureToGLSL(image3, 3, u_Sampler3); };
-  image3.src = 'textures/stone.png';
+  image3.src = 'textures/dirt.png';
 
   var image4 = new Image();
   image4.onload = function(){ sendTextureToGLSL(image4, 4, u_Sampler4); };
-  image4.src = 'textures/andesite.png';
+  image4.src = 'textures/sand.png';
 
   return true;
 }
@@ -329,29 +309,6 @@ function sendTextureToGLSL(image, textureUnitIndex, samplerUniform) {
 //===============================================
 
 function addActionForHtmlUI() {
-  // Part Slider Events
-  document.getElementById("baseTentacleSlide").addEventListener("input", function() {
-    g_baseTentacleAngle = this.value;
-    renderScene();
-  });
-  document.getElementById("secondTentacleSlide").addEventListener("input", function() {
-    g_secondTentacleAngle = this.value;
-    renderScene();
-  });
-  document.getElementById("thirdTentacleSlide").addEventListener("input", function() {
-    g_thirdTentacleAngle = this.value;
-    renderScene();
-  });
-  document.getElementById("tipTentacleSlide").addEventListener("input", function() {
-    g_tipTentacleAngle = this.value;
-    renderScene();
-  });
-
-  // Global Angle Slider Events
-  document.getElementById("angleSlide").addEventListener("input", function() {
-    g_globalAngle = this.value; renderScene();
-  });
-
   // Noise Offset Slider Events (Coding Train style)
   const noiseXSlider = document.getElementById("noiseOffsetXSlide");
   if (noiseXSlider) {
@@ -381,26 +338,22 @@ function addActionForHtmlUI() {
     });
   }
 
-  // Animation Button Event
-  document.getElementById("animationOnButton").onclick = function() { 
-    g_animationOn = true;
-  };
-  document.getElementById("animationOffButton").onclick = function() { 
-    g_animationOn = false;
-  };
-  document.getElementById("spinOnButton").onclick = function() {
-    g_spinMode = true;
-  };
-  document.getElementById("spinOffButton").onclick = function() {
-    g_spinMode = false;
-  };
-
   // Toggle Eye of Cthulhu
   document.getElementById("toggleEyeBtn").onclick = function() {
     g_eyeEnabled = !g_eyeEnabled;
-    this.textContent = g_eyeEnabled ? 'Hide Eye' : 'Show Eye';
+    this.textContent = g_eyeEnabled ? 'Hide Eye' : 'Call the Eye';
   };
-  
+
+  // Toggle Particles
+  const particleBtn = document.getElementById("toggleParticlesBtn");
+  if (particleBtn) {
+    particleBtn.onclick = function() {
+      g_particlesEnabled = !g_particlesEnabled;
+      this.textContent = g_particlesEnabled ? 'Disable Particles' : 'Enable Particles';
+    };
+    // Set initial text
+    particleBtn.textContent = g_particlesEnabled ? 'Disable Particles' : 'Enable Particles';
+  }
 }
 
 function setupMouseControl() {
@@ -425,12 +378,14 @@ function setupMouseControl() {
   }
 
   function updateCameraLook(ev) {
+    if (!g_camera) return; // Add safety check
+    
     const sensitivity = 0.4; // degrees per pixel (twice as fast)
     if (ev.movementX !== 0) {
-        g_camera.panLeft(-ev.movementX * sensitivity);
+      g_camera.panLeft(-ev.movementX * sensitivity);
     }
     if (ev.movementY !== 0 && g_camera.tiltUp) {
-        g_camera.tiltUp(-ev.movementY * sensitivity);
+      g_camera.tiltUp(-ev.movementY * sensitivity);
     }
   }
 }
@@ -463,10 +418,6 @@ function setupKeyControls() {
 function tick() {
   g_seconds = performance.now()/1000.0-g_startTime; // Update the current time
  
-  if(g_spinMode) {
-   g_globalAngle = (g_globalAngle+1) % 360;
-  }
-
   // Sprint logic
   let moveSpeed = SPEEDS.MOVE;
   if (g_keyStates['shift']) moveSpeed = SPEEDS.MOVE * 2.5; // Sprint multiplier
@@ -481,7 +432,9 @@ function tick() {
   if (g_keyStates[' ']) g_camera.moveUp();
   if (g_keyStates['control']) g_camera.moveDown();
 
-  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.update(g_camera.eye.elements, g_seconds);
+  if (g_eyeEnabled && g_eyeOfCthulhu) {
+    g_eyeOfCthulhu.update(g_camera.eye.elements, g_seconds, g_particlesEnabled);
+  }
 
   renderScene(); 
   requestAnimationFrame(tick); // Request the next frame
@@ -490,9 +443,9 @@ function tick() {
 function keydown(ev) {
   // Only handle F and G keys here, movement is handled in tick()
   if (ev.keyCode == 70) { // F key
-    addBlockInFront(g_camera);
+    addBlockAtCamera(g_camera);
   } else if (ev.keyCode == 71) { // G key
-    deleteBlockInFront(g_camera);
+    deleteBlockAtCamera(g_camera);
   } else {
     return; // Prevent the default action for other keys
   }
@@ -519,8 +472,6 @@ function setCameraMatrix() {
 function setModelBaseMatrix() {
   let baseMatrix = new Matrix4();
   // No need for any transformations here since we're using the global rotation matrix
-  baseMatrix.rotate(g_tiltAngle, 1, 0, 0); // Add tilt
-  baseMatrix.translate(0, g_bobHeight, 0); // Add bobbing
   g_voxelBaseMatrix = baseMatrix;
 }
 
@@ -549,6 +500,9 @@ function renderScene() {
   if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.render(g_camera.eye.elements, g_seconds);
 
   // 3. Draw transparent floor last
+  // Ensure blending is enabled for water
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   
   // Draw the floor
   var floor = new Cube();
@@ -556,11 +510,9 @@ function renderScene() {
   floor.textureNum = -2; // Use texture -2 (color)
   floor.matrix.setIdentity();
   floor.matrix.translate(0.0, 0.63, 0.0); 
-  floor.matrix.scale(32.0, 0.01, 32.0); 
+  floor.matrix.scale(32.0, 0.001, 32.0); 
   floor.matrix.translate(-0.5, 0.0, -0.5); 
   floor.renderFast();
-
-
 
   // Performance test
   var duration = performance.now() - startTime;
@@ -572,19 +524,45 @@ function renderScene() {
 //===============================================
 
 function drawMap() {
-  let wall = new Cube();
+  let wall = new Cube(); // Only create once!
   // Draw terrain
   for (let x = 0; x < MAP_SIZE; x++) {
     for (let z = 0; z < MAP_SIZE; z++) {
+      // Draw the ground
       let height = g_map[x][z];
       if (height > 0) {
         let y = height - 1;
         wall.matrix.setIdentity();
         wall.color = [1.0, 1.0, 1.0, 1.0];
-        wall.textureNum = 0;
+        wall.textureNum = (y <= 2) ? 4 : 0; // 4 is sand, 0 is grass
         wall.matrix.scale(0.5, 0.5, 0.5);
-        wall.matrix.translate(x - MAP_SIZE / 2, y - 1.5, z - MAP_SIZE / 2);
+        let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
+        let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
+        wall.matrix.translate(worldX, y - 1.5, worldZ);
+        if (wall.textureNum === 0) {
+          wall.setGrassBlockUVs();
+        }
         wall.renderFast();
+        if (wall.textureNum === 0) { // Reset all to default for next block
+          wall.resetDefaultUVs();
+        }
+      }
+      // Draw placed blocks
+      for (let y of g_placedBlocks[x][z]) {
+        wall.matrix.setIdentity();
+        wall.color = [1.0, 1.0, 1.0, 1.0];
+        wall.textureNum = (y <= 2) ? 4 : 0;
+        wall.matrix.scale(0.5, 0.5, 0.5);
+        let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
+        let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
+        wall.matrix.translate(worldX, y - 1.5, worldZ);
+        if (wall.textureNum === 0) {
+          wall.setGrassBlockUVs();
+        }
+        wall.renderFast();
+        if (wall.textureNum === 0) { // Reset all to default for next block
+          wall.resetDefaultUVs();
+        }
       }
     }
   }
@@ -596,9 +574,13 @@ function createMap() {
   const heightScale = 8;
   const minHeight = 1;
   g_map = Array(width).fill().map(() => Array(depth).fill(0));
+  
   for (let z = 0; z < depth; z++) {
     for (let x = 0; x < width; x++) {
-      let value = noise.simplex2((x + g_noiseStartX) / g_noiseScale, (z + g_noiseStartZ) / g_noiseScale);
+      // Convert map coordinates back to world coordinates for noise
+      let worldX = (x - MAP_OFFSET_X) / WORLD_TO_MAP;
+      let worldZ = (z - MAP_OFFSET_Z) / WORLD_TO_MAP;
+      let value = noise.simplex2((worldX + g_noiseStartX) / g_noiseScale, (worldZ + g_noiseStartZ) / g_noiseScale);
       let height = Math.max(minHeight, Math.floor((value + 1) / 2 * heightScale));
       g_map[x][z] = height;
     }
@@ -619,124 +601,122 @@ function sendTextToHTML(text, htmlID) {
   element.innerHTML = text;
 }
 
-// Helper to get map cell in front of the camera
-function getTargetBlock(camera, maxDistance = 5.0, step = 0.05) {
-    let dir = new Vector3(camera.at.elements);
-    dir.sub(camera.eye);
-    dir.normalize();
-    for (let t = 0.5; t < maxDistance; t += step) {
-        let pos = new Vector3(camera.eye.elements);
-        let stepVec = new Vector3(dir.elements);
-        stepVec = stepVec.mul(t);
-        pos.add(stepVec);
-        let mapX = Math.floor(pos.elements[0] + 16);
-        let mapZ = Math.floor(pos.elements[2] + 16);
-        let y = pos.elements[1];
-        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) break;
-        let blockHeight = g_map[mapX][mapZ] * 0.5;
-        // Check if y is just below the top of the stack
-        if (y < blockHeight + 0.25 && y > blockHeight - 0.25 && g_map[mapX][mapZ] > 0) {
-            // console.log('Targeting block at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
-            return { mapX, mapZ, blockHeight };
-        }
-    }
-    return null;
-}
+function addBlockAtCamera(camera) {
+  let pos = camera.eye.elements;
 
-function getTargetEmpty(camera, maxDistance = 5.0, step = 0.05) {
-    let dir = new Vector3(camera.at.elements);
-    dir.sub(camera.eye);
-    dir.normalize();
-    for (let t = 0.5; t < maxDistance; t += step) {
-        let pos = new Vector3(camera.eye.elements);
-        let stepVec = new Vector3(dir.elements);
-        stepVec = stepVec.mul(t);
-        pos.add(stepVec);
-        let mapX = Math.floor(pos.elements[0] + 16);
-        let mapZ = Math.floor(pos.elements[2] + 16);
-        let y = pos.elements[1];
-        if (mapX < 0 || mapX >= 32 || mapZ < 0 || mapZ >= 32) break;
-        let blockHeight = g_map[mapX][mapZ] * 0.5;
-        // Check if y is just above the top of the stack
-        if (y > blockHeight + 0.25) {
-            // console.log('Targeting empty at', mapX, mapZ, 'height:', blockHeight, 'y:', y);
-            return { mapX, mapZ, blockHeight };
-        }
-    }
-    return null;
-}
-
-function simpleRaycast(camera, maxDistance = 5, step = 0.1) {
   let dir = new Vector3(camera.at.elements);
   dir.sub(camera.eye);
   dir.normalize();
-  let pos = new Vector3(camera.eye.elements);
-
-  for (let t = 0; t < maxDistance; t += step) {
-    let check = new Vector3(pos.elements);
-    let stepVec = new Vector3(dir.elements).mul(t);
-    check.add(stepVec);
-
-    let mapX = Math.floor(check.elements[0] + MAP_SIZE / 2);
-    let mapZ = Math.floor(check.elements[2] + MAP_SIZE / 2);
-
-    if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) break;
-
-    if (g_map[mapX][mapZ] > 0) {
-      return { mapX, mapZ };
-    }
+  
+  // Calculate offsets based on direction components
+  // Account for BLOCK_SCALE in the direction
+  let offsetX = 0;
+  let offsetZ = 0;
+  let offsetY = 0;
+  
+  // Use different thresholds for horizontal and vertical placement
+  const horizontalThreshold = 0.3; // Increased threshold for more precise horizontal placement
+  const verticalThreshold = 0.05; // Keep vertical threshold the same
+  
+  // Find the dominant direction
+  let maxComponent = Math.max(
+    Math.abs(dir.elements[0]),
+    Math.abs(dir.elements[1]),
+    Math.abs(dir.elements[2])
+  );
+  
+  // Only place in the dominant direction
+  if (Math.abs(dir.elements[0]) === maxComponent && Math.abs(dir.elements[0]) > horizontalThreshold) {
+    offsetX = dir.elements[0] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
   }
-  return null;
+  if (Math.abs(dir.elements[1]) === maxComponent && Math.abs(dir.elements[1]) > verticalThreshold) {
+    offsetY = dir.elements[1] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
+  }
+  if (Math.abs(dir.elements[2]) === maxComponent && Math.abs(dir.elements[2]) > horizontalThreshold) {
+    offsetZ = dir.elements[2] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
+  }
+  
+  // Convert world coordinates to map coordinates, accounting for block scale and direction
+  let mapX = Math.floor(((pos[0] + offsetX) / BLOCK_SCALE) + MAP_HALF);
+  let mapZ = Math.floor(((pos[2] + offsetZ) / BLOCK_SCALE) + MAP_HALF);
+  
+  // Check bounds
+  if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) return;
+  
+  // Get the height at the camera position, accounting for block scale and Y offset
+  let targetY = Math.floor(pos[1] / BLOCK_SCALE) + 1 + Math.floor(offsetY / BLOCK_SCALE);
+  
+  // Add this height to the placed blocks array if it's not already there
+  if (!g_placedBlocks[mapX][mapZ].includes(targetY)) {
+    g_placedBlocks[mapX][mapZ].push(targetY);
+  }
 }
 
-function simpleRaycastWithEmpty(camera, maxDistance = 10, step = 0.1) {
+function deleteBlockAtCamera(camera) {
+  let pos = camera.eye.elements;
   let dir = new Vector3(camera.at.elements);
   dir.sub(camera.eye);
   dir.normalize();
-  let pos = new Vector3(camera.eye.elements);
-
-  // Debug: log camera position and direction
-  console.log("Camera eye:", camera.eye.elements, "Camera at:", camera.at.elements, "Dir:", dir.elements);
-
-  let lastEmpty = null;
-
-  for (let t = 0; t < maxDistance; t += step) {
-    let check = new Vector3(pos.elements);
-    let stepVec = new Vector3(dir.elements).mul(t);
-    check.add(stepVec);
-
-    let mapX = Math.floor(check.elements[0] + MAP_SIZE / 2);
-    let mapZ = Math.floor(check.elements[2] + MAP_SIZE / 2);
-
-    if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) break;
-
-    if (g_map[mapX][mapZ] > 0) {
-      // Debug
-      console.log("Hit block at", mapX, mapZ, "lastEmpty", lastEmpty);
-      return { mapX, mapZ, lastEmpty };
-    } else {
-      lastEmpty = { mapX, mapZ };
-    }
+  
+  // Calculate offsets based on direction components
+  // Account for BLOCK_SCALE in the direction
+  let offsetX = 0;
+  let offsetZ = 0;
+  let offsetY = 0;
+  
+  // Use different thresholds for horizontal and vertical placement
+  const horizontalThreshold = 0.3; // Same as addBlockAtCamera
+  const verticalThreshold = 0.05; // Same as addBlockAtCamera
+  
+  // Find the dominant direction
+  let maxComponent = Math.max(
+    Math.abs(dir.elements[0]),
+    Math.abs(dir.elements[1]),
+    Math.abs(dir.elements[2])
+  );
+  
+  // Only delete in the dominant direction
+  if (Math.abs(dir.elements[0]) === maxComponent && Math.abs(dir.elements[0]) > horizontalThreshold) {
+    offsetX = dir.elements[0] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
   }
-  // Debug
-  console.log("No block hit, lastEmpty", lastEmpty);
-  return null;
-}
-
-function addBlockInFront(camera) {
-  let hit = simpleRaycastWithEmpty(camera);
-  if (hit && hit.lastEmpty) {
-    console.log("Adding block at", hit.lastEmpty.mapX, hit.lastEmpty.mapZ);
-    g_map[hit.lastEmpty.mapX][hit.lastEmpty.mapZ] += 1;
+  if (Math.abs(dir.elements[1]) === maxComponent && Math.abs(dir.elements[1]) > verticalThreshold) {
+    offsetY = dir.elements[1] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
   }
-}
-
-function deleteBlockInFront(camera) {
-  let hit = simpleRaycastWithEmpty(camera);
-  if (hit) {
-    console.log("Deleting block at", hit.mapX, hit.mapZ);
-    if (g_map[hit.mapX][hit.mapZ] > 1) {
-      g_map[hit.mapX][hit.mapZ] -= 1;
+  if (Math.abs(dir.elements[2]) === maxComponent && Math.abs(dir.elements[2]) > horizontalThreshold) {
+    offsetZ = dir.elements[2] > 0 ? BLOCK_SCALE : -BLOCK_SCALE;
+  }
+  
+  // Convert world coordinates to map coordinates, accounting for block scale and direction
+  let mapX = Math.floor(((pos[0] + offsetX) / BLOCK_SCALE) + MAP_HALF);
+  let mapZ = Math.floor(((pos[2] + offsetZ) / BLOCK_SCALE) + MAP_HALF);
+  
+  // Check bounds
+  if (mapX < 0 || mapX >= MAP_SIZE || mapZ < 0 || mapZ >= MAP_SIZE) return;
+  
+  // Get the height at the camera position, accounting for block scale and Y offset
+  let targetY = Math.floor(pos[1] / BLOCK_SCALE) + 1 + Math.floor(offsetY / BLOCK_SCALE);
+  
+  // Check a small area around the target position for blocks to delete
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      let checkX = mapX + dx;
+      let checkZ = mapZ + dz;
+      
+      // Skip if out of bounds
+      if (checkX < 0 || checkX >= MAP_SIZE || checkZ < 0 || checkZ >= MAP_SIZE) continue;
+      
+      // Try to delete from placed blocks first
+      let index = g_placedBlocks[checkX][checkZ].indexOf(targetY);
+      if (index !== -1) {
+        g_placedBlocks[checkX][checkZ].splice(index, 1);
+        return; // Stop after deleting one block
+      }
+      
+      // Try to delete from terrain - if the target height matches the terrain height, delete it
+      if (g_map[checkX][checkZ] === targetY + 1) { // +1 because terrain height is stored as height+1
+        g_map[checkX][checkZ] = 0; // Set to 0 to completely remove the block
+        return; // Stop after deleting one block
+      }
     }
   }
 }
