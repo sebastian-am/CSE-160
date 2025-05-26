@@ -31,16 +31,43 @@ smorgese@ucsc.edu
       <!-- Left: Controls/Sliders/Buttons -->
       <td valign="top" style="width:20%">
         <section>
-          <strong>World Controls:</strong>
+          <strong>Lighting & Shape Controls:</strong>
           <p>
-            Light X <input type="range" min="-250" max="250" value="0" class="slider" id="lightSlideX"> <br>
-            Light Y <input type="range" min="-250" max="250" value="0" class="slider" id="lightSlideY"> <br>
-            Light Z <input type="range" min="-250" max="250" value="-200" class="slider" id="lightSlideZ">
+            Light Toggle:
+            <button id="lightOn">Light On</button>
+            <button id="lightOff">Light Off</button>
+          </p>
           <p>
-            Nomral Toggles:
+            Light Type:
+            <select id="lightTypeSelect">
+              <option value="point">Point</option>
+              <option value="spot">Spot</option>
+            </select>
+          </p>
+          <p>
+            Light X <input type="range" min="-247" max="247" value="0" class="slider" id="lightSlideX"> <br>
+            Light Y <input type="range" min="-247" max="247" value="200" class="slider" id="lightSlideY"> <br>
+            Light Z <input type="range" min="-247" max="247" value="-200" class="slider" id="lightSlideZ">
+          </p>
+          <p>
+            Normal Toggle:
             <button id="normalOn">Normal On</button>
             <button id="normalOff">Normal Off</button>
           </p>
+          <p>
+            Shape to Spawn:
+            <select id="shapeSelect">
+              <option value="sphere">Sphere</option>
+              <option value="cube">Cube</option>
+              <option value="eye">Eye</option>
+            </select>
+          </p>
+          <p id="particlesToggleRow">
+            Toggle Particles:
+            <button id="toggleParticlesBtn">Enable Particles</button>
+          </p>
+          <hr>
+          <strong>World Controls:</strong>
           <p>
             Noise Offset X:
             <input type="range" min="-200" max="200" value="0" step="1" class="slider" id="noiseOffsetXSlide" />
@@ -52,14 +79,6 @@ smorgese@ucsc.edu
           <p>
             Noise Scale: &nbsp &nbsp  
             <input type="range" min="22" max="100" value="22" step="1" class="slider" id="noiseScaleSlide" />
-          </p>
-          <p>
-            Toggle Eye of Cthulhu:
-            <button id="toggleEyeBtn">Summon the Eye</button>
-          </p>
-          <p>
-            Toggle Particles:
-            <button id="toggleParticlesBtn">Enable Particles</button>
           </p>
         </section>
       </td>
@@ -108,14 +127,11 @@ smorgese@ucsc.edu
       <option value="https://developer.mozilla.org/en-US/docs/Web/API/Pointer_Lock_API">
         [link] MDN - Pointer Lock API
       </option>
-      <option value="">
-        [info] ChatGPT – Helped convert camera from "orbiting mode" to a first-person player view
+          <option value="https://webglfundamentals.org/webgl/lessons/webgl-3d-lighting-spot.html">
+        [link] WebGL 3D - Spot Lighting
       </option>
       <option value="">
-        [info] ChatGPT - Helped develop and debug the Eye of Cthulhu update() and render() functions
-      </option>
-      <option value="">
-        [info] ChatGPT - Helped debug my add/break block funcitons
+        [info] ChatGPT – Helped light the eye model and debug the particle system
       </option> 
     </select>
   </section>
@@ -124,16 +140,9 @@ smorgese@ucsc.edu
   <section class="grader-notes" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 8px;">
     <Strong>Notes to Grader:</Strong>
     <ul>
-      <li><Strong>Story:</Strong> You have to keep away from the Eye of Cthulhu, who's always chasing you (upon pressing the toggle button). The eye follows you around the procedurally generated terrain, creating a tense atmosphere.</li>
-      <li><Strong>Wow Factors:</Strong>
-        <ul>
-          <li>Procedural terrain generation using Simplex noise (with controls for offset and scale)</li>
-          <li>Simple particle system with billboarding that emits from the eye's surface</li>
-          <li>Semi-realistic tendril movement that sways based on the eye's turning direction</li>
-        </ul>
-      </li>
-      <li>There's some white artifacting on the grass blocks due to texture bleeding issues from mipmapping. This was caused by using a less-than-ideal base texture.</li>
-      <li>Any blocks placed must be over the 32x32 map area. </li>
+      <li>Shapes (Sphere, Cube, Eye) can be spawned dynamically based on selection.</li>
+      <li>Light position can be adjusted with sliders.</li>
+      <li>Noise parameters can be modified to change terrain appearance.</li>
     </ul>
   </section>
 
