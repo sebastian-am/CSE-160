@@ -43,6 +43,7 @@ var FSHADER_SOURCE = `
   uniform vec3 u_spotLightDir;
   uniform float u_spotLightCutoff;
   uniform bool u_spotLightOn;
+  uniform vec3 u_lightColor;
   varying vec4 v_vertPos;
   void main() {
     if (u_whichTexture == -3) {
@@ -81,8 +82,8 @@ var FSHADER_SOURCE = `
     if (u_shininess > 0.0) {
         specular = pow(max(dot(E, R), 0.0), u_shininess);
     }
-    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.85; 
-    vec3 ambient = vec3(gl_FragColor) * 0.4; 
+    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.85 * u_lightColor; 
+    vec3 ambient = vec3(gl_FragColor) * 0.4 * u_lightColor; 
 
     if (u_lightOn) {
       gl_FragColor = vec4(diffuse + ambient + specular, 1.0);
@@ -97,7 +98,7 @@ var FSHADER_SOURCE = `
       float spotCos = dot(normalize(-u_spotLightDir), spotL);
       if (spotCos > cos(radians(u_spotLightCutoff))) {
         float spotNDotL = max(dot(N, spotL), 0.0);
-        vec3 spotDiffuse = vec3(gl_FragColor) * spotNDotL * 0.85;
+        vec3 spotDiffuse = vec3(gl_FragColor) * spotNDotL * 0.85 * u_lightColor;
         vec3 spotR = reflect(-spotL, N);
         float spotSpecular = 0.0;
         if (u_shininess > 0.0) {
@@ -146,6 +147,7 @@ var FSHADER_SOURCE = `
 /** @type {WebGLUniformLocation} */ let u_spotLightDir = null;
 /** @type {WebGLUniformLocation} */ let u_spotLightCutoff = null;
 /** @type {WebGLUniformLocation} */ let u_spotLightOn = null;
+/** @type {WebGLUniformLocation} */ let u_lightColor = null;
 
 /** Map Constants **/
 const MAP_SIZE = 64;  // Size of the map in blocks
@@ -205,6 +207,7 @@ const g_noiseStep = 1;  // Per-block step for noise generation
 
 let g_shapeToShow = 'sphere';
 let g_lightType = 'point';
+let g_lightColor = [1, 1, 1];
 
 function main() {
   noise.seed(Math.random()); 
@@ -251,6 +254,22 @@ function main() {
       g_lightType = lightTypeSelect.value;
       renderScene();
     };
+  }
+
+  // Light color sliders
+  const lightColorR = document.getElementById('lightColorR');
+  const lightColorG = document.getElementById('lightColorG');
+  const lightColorB = document.getElementById('lightColorB');
+  function updateLightColor() {
+    g_lightColor[0] = parseFloat(lightColorR.value);
+    g_lightColor[1] = parseFloat(lightColorG.value);
+    g_lightColor[2] = parseFloat(lightColorB.value);
+    renderScene();
+  }
+  if (lightColorR && lightColorG && lightColorB) {
+    lightColorR.oninput = updateLightColor;
+    lightColorG.oninput = updateLightColor;
+    lightColorB.oninput = updateLightColor;
   }
 
   // Specify the color for clearing <canvas>
@@ -379,6 +398,11 @@ function connectVariablesToGLSL() {
   u_spotLightOn = gl.getUniformLocation(gl.program, 'u_spotLightOn');
   if (!u_spotLightOn) {
     console.log('Failed to get the storage location of u_spotLightOn');
+    return;
+  }
+  u_lightColor = gl.getUniformLocation(gl.program, 'u_lightColor');
+  if (!u_lightColor) {
+    console.log('Failed to get the storage location of u_lightColor');
     return;
   }
 
@@ -721,6 +745,8 @@ function renderScene() {
   // Performance test
   var duration = performance.now() - startTime;
   sendTextToHTML("ms: " + Math.floor(duration) + " fps: " + Math.floor(1000/duration), "numdot");
+
+  gl.uniform3f(u_lightColor, g_lightColor[0], g_lightColor[1], g_lightColor[2]);
 }
 
 //===============================================
