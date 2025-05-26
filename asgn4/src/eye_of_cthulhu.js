@@ -137,15 +137,23 @@ class EyeOfCthulhu {
         // Draw body (voxel sphere)
         for (let i = 0; i < this.voxelCubes.length; i++) {
             let cube = this.voxelCubes[i];
+            cube.textureNum = g_normalOn ? -3 : -2;
             cube.matrix = new Matrix4(baseMatrix);
             cube.matrix.multiply(cube.baseMatrix);
+            let normalMatrix = new Matrix4(cube.matrix);
+            normalMatrix.setInverseOf(normalMatrix).transpose();
+            gl.uniformMatrix4fv(u_NormalMatrix, false, normalMatrix.elements);
             cube.renderFast();
         }
         // Draw red voxels
         for (let i = 0; i < this.redVoxels.length; i++) {
             let cube = this.redVoxels[i];
+            cube.textureNum = g_normalOn ? -3 : -2;
             cube.matrix = new Matrix4(baseMatrix);
             cube.matrix.multiply(cube.baseMatrix);
+            let normalMatrix = new Matrix4(cube.matrix);
+            normalMatrix.setInverseOf(normalMatrix).transpose();
+            gl.uniformMatrix4fv(u_NormalMatrix, false, normalMatrix.elements);
             cube.renderFast();
         }
         // Draw tendrils (with ripple and sway)
@@ -156,6 +164,8 @@ class EyeOfCthulhu {
             tendrilBaseMatrix.translate(base[0], base[1], base[2]);
             let segmentLength = 0.3;
             for (let i = 0; i < tendril.length; i++) {
+                let segment = tendril[i];
+                segment.textureNum = g_normalOn ? -3 : -2;
                 // Sway strongest at base, less at tip
                 let factor = (1 - i / (tendril.length - 1));
                 let segmentYawSway = tendrilYawSway * factor;
@@ -164,12 +174,14 @@ class EyeOfCthulhu {
                 tendrilBaseMatrix.rotate(waveAngle, 1, 0, 0); // ripple (X axis)
                 tendrilBaseMatrix.rotate(segmentYawSway, 0, 1, 0); // left/right trailing (Y axis)
                 tendrilBaseMatrix.rotate(segmentPitchSway, 1, 0, 0); // up/down trailing (X axis)
-                let segment = tendril[i];
                 let scaleFactor = 0.125 * (1.0 - 0.1 * i); // Slightly less shrink per segment
                 let segmentMatrix = new Matrix4(tendrilBaseMatrix);
                 segmentMatrix.scale(scaleFactor, scaleFactor, segmentLength);
                 segmentMatrix.translate(0, 0, 0.5);
                 segment.matrix = segmentMatrix;
+                let normalMatrix = new Matrix4(segmentMatrix);
+                normalMatrix.setInverseOf(normalMatrix).transpose();
+                gl.uniformMatrix4fv(u_NormalMatrix, false, normalMatrix.elements);
                 segment.renderFast();
                 tendrilBaseMatrix.translate(0, 0, segmentLength);
             }
@@ -179,10 +191,15 @@ class EyeOfCthulhu {
         let pupil = new Cylinder();
         pupil.color = [0.0, 0.0, 0.0, 1.0];
         pupil.segments = 8;
+        pupil.textureNum = g_normalOn ? -3 : -2;
+        pupil.shininess = 200.0;
         let pupilMatrix = new Matrix4(baseMatrix);
         pupilMatrix.translate(0.0, 0.0, -0.52);
         pupilMatrix.scale(0.3, 0.3, 0.2);
         pupil.matrix = pupilMatrix;
+        let pupilNormalMatrix = new Matrix4(pupilMatrix);
+        pupilNormalMatrix.setInverseOf(pupilNormalMatrix).transpose();
+        gl.uniformMatrix4fv(u_NormalMatrix, false, pupilNormalMatrix.elements);
         pupil.render();
 
         // Draw reflections
@@ -416,6 +433,8 @@ class EyeOfCthulhu {
 
     drawParticles() {
         if (this.particles.length === 0) return;
+        let identityNormalMatrix = new Matrix4(); // Set normal matrix to identity for particles
+        gl.uniformMatrix4fv(u_NormalMatrix, false, identityNormalMatrix.elements);
         const particleVertices = new Float32Array([
             -0.5, -0.5, 0.0,  // bottom-left
              0.5, -0.5, 0.0,  // bottom-right
@@ -449,23 +468,11 @@ class EyeOfCthulhu {
 
         for (const p of this.particles) {
             gl.uniform1f(u_shininess, 0.0);
-            const normal = [
-                cameraPos[0] - p.position[0],
-                cameraPos[1] - p.position[1],
-                cameraPos[2] - p.position[2]
-            ];
-            const len = Math.sqrt(normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]);
-            let norm = [0, 0, 1];
-            if (len > 0.001) {
-                norm[0] = normal[0] / len;
-                norm[1] = normal[1] / len;
-                norm[2] = normal[2] / len;
-            }
             var quadNormals = new Float32Array([
-                norm[0], norm[1], norm[2],
-                norm[0], norm[1], norm[2],
-                norm[0], norm[1], norm[2],
-                norm[0], norm[1], norm[2]
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1
             ]);
             if (!window.particleNormalBuffer) {
                 window.particleNormalBuffer = gl.createBuffer();
@@ -528,6 +535,15 @@ class EyeOfCthulhu {
 
             particleMatrix.scale(p.size, p.size, p.size);
             gl.uniformMatrix4fv(u_ModelMatrix, false, particleMatrix.elements);
+
+            // Set normal matrix to rotation part of particleMatrix
+            let normalMatrix = new Matrix4(particleMatrix);
+            // Remove translation
+            normalMatrix.elements[12] = 0;
+            normalMatrix.elements[13] = 0;
+            normalMatrix.elements[14] = 0;
+            gl.uniformMatrix4fv(u_NormalMatrix, false, normalMatrix.elements);
+
             gl.uniform4fv(u_FragColor, p.color || this.particleColor);
             gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
         }

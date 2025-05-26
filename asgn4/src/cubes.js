@@ -27,6 +27,7 @@ class Cube {
         this.type = 'cube';
         this.color = [1.0, 1.0, 1.0, 1.0]; 
         this.matrix = new Matrix4();
+        this.normalMatrix = new Matrix4();
         this.textureNum = 0; // Default to texture 0
         this.shininess = 0.0;
         this.cubeVerts = new Float32Array([ 

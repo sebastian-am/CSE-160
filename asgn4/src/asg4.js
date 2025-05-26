@@ -13,13 +13,14 @@ var VSHADER_SOURCE = `
   varying vec3 v_Normal;
   varying vec4 v_vertPos;
   uniform mat4 u_ModelMatrix;
+  uniform mat4 u_NormalMatrix;
   uniform mat4 u_GlobalRotationMatrix;
   uniform mat4 u_ViewMatrix;
   uniform mat4 u_ProjectionMatrix;
   void main() {
     gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_GlobalRotationMatrix * u_ModelMatrix * a_Position;
     v_UV = a_UV;
-    v_Normal = a_Normal;
+    v_Normal = normalize(vec3(u_NormalMatrix * vec4(a_Normal, 1.0)));
     v_vertPos = u_ModelMatrix * a_Position;
   }`
 
@@ -36,7 +37,12 @@ var FSHADER_SOURCE = `
   uniform int u_whichTexture;
   uniform vec3 u_lightPos;
   uniform vec3 u_cameraPos;
+  uniform bool u_lightOn;
   uniform float u_shininess;
+  uniform vec3 u_spotLightPos;
+  uniform vec3 u_spotLightDir;
+  uniform float u_spotLightCutoff;
+  uniform bool u_spotLightOn;
   varying vec4 v_vertPos;
   void main() {
     if (u_whichTexture == -3) {
@@ -59,7 +65,7 @@ var FSHADER_SOURCE = `
       gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // Default color
     }
 
-    // Lighting calculation
+    // Point Light 
     vec3 lightVector = u_lightPos - v_vertPos.xyz;
     float r = length(lightVector);
     // N dot L
@@ -75,10 +81,31 @@ var FSHADER_SOURCE = `
     if (u_shininess > 0.0) {
         specular = pow(max(dot(E, R), 0.0), u_shininess);
     }
-    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.7; 
-    vec3 ambient = vec3(gl_FragColor) * 0.3; 
-    gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
+    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.85; 
+    vec3 ambient = vec3(gl_FragColor) * 0.4; 
 
+    if (u_lightOn) {
+      gl_FragColor = vec4(diffuse + ambient + specular, 1.0);
+      gl_FragColor.a = u_FragColor.a;
+    }
+
+    // Spotlight 
+    if (u_spotLightOn) {
+      vec3 spotVector = u_spotLightPos - v_vertPos.xyz;
+      float spotDist = length(spotVector);
+      vec3 spotL = normalize(spotVector);
+      float spotCos = dot(normalize(-u_spotLightDir), spotL);
+      if (spotCos > cos(radians(u_spotLightCutoff))) {
+        float spotNDotL = max(dot(N, spotL), 0.0);
+        vec3 spotDiffuse = vec3(gl_FragColor) * spotNDotL * 0.85;
+        vec3 spotR = reflect(-spotL, N);
+        float spotSpecular = 0.0;
+        if (u_shininess > 0.0) {
+          spotSpecular = pow(max(dot(E, spotR), 0.0), u_shininess);
+        }
+        gl_FragColor.rgb += spotDiffuse + spotSpecular;
+      }
+    }
 
     // Red/green distance visualization
     // float r = length(lightVector);
@@ -105,6 +132,7 @@ var FSHADER_SOURCE = `
 /** @type {GLint} */ let a_Normal = null;
 /** @type {WebGLUniformLocation} */ let u_FragColor = null;
 /** @type {WebGLUniformLocation} */ let u_ModelMatrix = null;
+/** @type {WebGLUniformLocation} */ let u_NormalMatrix = null;
 /** @type {WebGLUniformLocation} */ let u_GlobalRotationMatrix = null;
 /** @type {WebGLUniformLocation} */ let u_ViewMatrix = null;
 /** @type {WebGLUniformLocation} */ let u_ProjectionMatrix = null;
@@ -114,6 +142,10 @@ var FSHADER_SOURCE = `
 /** @type {WebGLUniformLocation} */ let u_cameraPos = null;
 /** @type {WebGLUniformLocation} */ let u_whichTexture = null;
 /** @type {WebGLUniformLocation} */ let u_shininess = null;
+/** @type {WebGLUniformLocation} */ let u_spotLightPos = null;
+/** @type {WebGLUniformLocation} */ let u_spotLightDir = null;
+/** @type {WebGLUniformLocation} */ let u_spotLightCutoff = null;
+/** @type {WebGLUniformLocation} */ let u_spotLightOn = null;
 
 /** Map Constants **/
 const MAP_SIZE = 64;  // Size of the map in blocks
@@ -131,12 +163,15 @@ const g_noiseStep = 1;  // Per-block step for noise generation
 
 /** Animation Controls **/
 /** @type {number} */ let g_globalAngle = 0;
-/** @type {boolean} */ let g_eyeEnabled = false;
+/** @type {boolean} */ let g_eyeEnabled = true;
 /** @type {boolean} */ let g_particlesEnabled = true;
 
 /** Environment Variables **/
 /** @type {boolean} */ let g_normalOn = false; // Normal debugger toggle
-/** @type {number[][]} */ let g_lightPos = [0, 1, -2];
+/** @type {number[][]} */ let g_lightPos = [0, 8, -2];
+/** @type {boolean} */ let g_lightOn = true; // Light toggle
+/** @type {boolean} */ let g_lightXAnimated = true;
+/** @type {number} */ let g_lightXOffset = 0;
 
 /** Mouse Control **/
 /** @type {boolean} */ let g_mouseDown = false;
@@ -168,6 +203,9 @@ const g_noiseStep = 1;  // Per-block step for noise generation
     'control': false
 };
 
+let g_shapeToShow = 'sphere';
+let g_lightType = 'point';
+
 function main() {
   noise.seed(Math.random()); 
   setupWebGL();
@@ -184,6 +222,36 @@ function main() {
   document.onkeydown = keydown; // Register the keydown event handler
   
   initTexture(); // Initialize texture
+
+  // Add shape selection event
+  const shapeSelect = document.getElementById('shapeSelect');
+  const particlesToggleRow = document.getElementById('particlesToggleRow');
+  if (shapeSelect) {
+    shapeSelect.onchange = function() {
+      g_shapeToShow = shapeSelect.value;
+      g_eyeEnabled = (g_shapeToShow === 'eye');
+      // Show/hide particles toggle
+      if (particlesToggleRow) {
+        particlesToggleRow.style.display = (g_shapeToShow === 'eye') ? '' : 'none';
+      }
+      renderScene();
+    };
+    // Initial state
+    if (particlesToggleRow) {
+      particlesToggleRow.style.display = (g_shapeToShow === 'eye') ? '' : 'none';
+    }
+    g_eyeEnabled = (g_shapeToShow === 'eye');
+    renderScene();
+  }
+
+  // Add light type selection event
+  const lightTypeSelect = document.getElementById('lightTypeSelect');
+  if (lightTypeSelect) {
+    lightTypeSelect.onchange = function() {
+      g_lightType = lightTypeSelect.value;
+      renderScene();
+    };
+  }
 
   // Specify the color for clearing <canvas>
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -238,6 +306,11 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_ModelMatrix');
     return;
   }
+  u_NormalMatrix = gl.getUniformLocation(gl.program, 'u_NormalMatrix');
+  if (!u_NormalMatrix) {
+    console.log('Failed to get the storage location of u_NormalMatrix');
+    return;
+  }
   u_GlobalRotationMatrix = gl.getUniformLocation(gl.program, 'u_GlobalRotationMatrix');
   if (!u_GlobalRotationMatrix) {
     console.log('Failed to get the storage location of u_GlobalRotationMatrix');
@@ -268,6 +341,11 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_cameraPos');
     return;
   }
+  u_lightOn = gl.getUniformLocation(gl.program, 'u_lightOn');
+  if (!u_lightOn) {
+    console.log('Failed to get the storage location of u_lightOn');
+    return;
+  }
   u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
   if (!u_Sampler0) {
     console.log('Failed to get the storage location of u_Sampler0');
@@ -281,6 +359,26 @@ function connectVariablesToGLSL() {
   u_shininess = gl.getUniformLocation(gl.program, 'u_shininess');
   if (!u_shininess) {
     console.log('Failed to get the storage location of u_shininess');
+    return;
+  }
+  u_spotLightPos = gl.getUniformLocation(gl.program, 'u_spotLightPos');
+  if (!u_spotLightPos) {
+    console.log('Failed to get the storage location of u_spotLightPos');
+    return;
+  }
+  u_spotLightDir = gl.getUniformLocation(gl.program, 'u_spotLightDir');
+  if (!u_spotLightDir) {
+    console.log('Failed to get the storage location of u_spotLightDir');
+    return;
+  }
+  u_spotLightCutoff = gl.getUniformLocation(gl.program, 'u_spotLightCutoff');
+  if (!u_spotLightCutoff) {
+    console.log('Failed to get the storage location of u_spotLightCutoff');
+    return;
+  }
+  u_spotLightOn = gl.getUniformLocation(gl.program, 'u_spotLightOn');
+  if (!u_spotLightOn) {
+    console.log('Failed to get the storage location of u_spotLightOn');
     return;
   }
 
@@ -334,8 +432,17 @@ function addActionForHtmlUI() {
   document.getElementById("normalOn").onclick = function() {g_normalOn = true;};
   document.getElementById("normalOff").onclick = function() {g_normalOn = false;};
 
+  // Light On/Off Button
+  document.getElementById("lightOn").onclick = function() {g_lightOn = true;};
+  document.getElementById("lightOff").onclick = function() {g_lightOn = false;};
+  
   // Light Sliders
-  document.getElementById("lightSlideX").addEventListener("input", function() {g_lightPos[0] = this.value/10; renderScene(); });
+  document.getElementById("lightSlideX").addEventListener("input", function() {
+    g_lightPos[0] = this.value/10;
+    g_lightXOffset = g_lightPos[0] - Math.sin(g_seconds);
+    g_lightXAnimated = true;
+    renderScene();
+  });
   document.getElementById("lightSlideY").addEventListener("input", function() {g_lightPos[1] = this.value/10; renderScene(); });
   document.getElementById("lightSlideZ").addEventListener("input", function() {g_lightPos[2] = this.value/10; renderScene(); });
 
@@ -453,7 +560,10 @@ function tick() {
   if (g_keyStates[' ']) g_camera.moveUp();
   if (g_keyStates['control']) g_camera.moveDown();
 
-  if (g_eyeEnabled && g_eyeOfCthulhu) {
+  if (g_eyeOfCthulhu && g_eyeEnabled) {
+    g_eyeOfCthulhu.pos.x = 0;
+    g_eyeOfCthulhu.pos.y = 5;
+    g_eyeOfCthulhu.pos.z = 0;
     g_eyeOfCthulhu.update(g_camera.eye.elements, g_seconds, g_particlesEnabled);
   }
 
@@ -465,7 +575,9 @@ function tick() {
 
 function updateAnimation() {
   // Light position update
-  g_lightPos[0] = Math.sin(g_seconds); // Light moves in a circle around the origin
+  if (g_lightXAnimated) {
+    g_lightPos[0] = g_lightXOffset + Math.sin(g_seconds);
+  }
 }
 
 function keydown(ev) {
@@ -509,16 +621,46 @@ function renderScene() {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
+  // Light and camera positions
   gl.uniform3f(u_lightPos, g_lightPos[0], g_lightPos[1], g_lightPos[2]); 
   gl.uniform3f(u_cameraPos, g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2]);
+  gl.uniform1i(u_lightOn, g_lightOn && g_lightType === 'point');
+  // Spotlight uniforms
+  gl.uniform3f(u_spotLightPos, g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+  // Spotlight direction: from light to shape center
+  let target = [0, 5, 0];
+  if (g_shapeToShow === 'eye' && g_eyeOfCthulhu) {
+    target = [g_eyeOfCthulhu.pos.x, g_eyeOfCthulhu.pos.y, g_eyeOfCthulhu.pos.z];
+  }
+  let dir = [
+    target[0] - g_lightPos[0],
+    target[1] - g_lightPos[1],
+    target[2] - g_lightPos[2]
+  ];
+  let len = Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
+  if (len > 0.001) {
+    dir = [dir[0]/len, dir[1]/len, dir[2]/len];
+  } else {
+    dir = [0, -1, 0];
+  }
+  gl.uniform3f(u_spotLightDir, dir[0], dir[1], dir[2]);
+  gl.uniform1f(u_spotLightCutoff, 20.0); // 20 degree cutoff
+  gl.uniform1i(u_spotLightOn, g_lightType === 'spot' && g_lightOn);
+
+  // Set normal matrix to identity for static objects
+  let identityNormalMatrix = new Matrix4();
+  gl.uniformMatrix4fv(u_NormalMatrix, false, identityNormalMatrix.elements);
+
   // 1. Draw light source
-  var light = new Cube();
-  light.color = [2.0, 2.0, 0.0, 1.0]; 
-  light.textureNum = -2; // Color
-  light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
-  light.matrix.scale(-0.5, -0.5, -0.5); // Scale down the light cube
-  light.matrix.translate(-0.5, -0.5, -0.5); // Center the cube
-  light.renderFast();
+  if (g_lightOn) {
+    var light = new Cube();
+    light.color = [2.0, 2.0, 0.0, 1.0]; 
+    light.textureNum = -2; // Color
+    light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+    light.matrix.scale(-0.5, -0.5, -0.5); // Scale down the light cube
+    light.matrix.translate(-0.5, -0.5, -0.5); // Center the cube
+    light.renderFast();
+  }
 
   // 2. Draw skybox (opaque)
   var skybox = new Cube();
@@ -531,10 +673,39 @@ function renderScene() {
 
   // 3.  Draw all opaque objects (blocks, Eye, etc.)
   drawMap();
-  if (g_eyeEnabled && g_eyeOfCthulhu) g_eyeOfCthulhu.render(g_camera.eye.elements);
-  // Ensure blending is enabled even if Eye is enabled
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  // Always have an object on screen
+  if (!g_shapeToShow || (g_shapeToShow !== 'eye' && g_shapeToShow !== 'sphere' && g_shapeToShow !== 'cube')) {
+    g_shapeToShow = 'eye';
+  }
+  if (g_eyeEnabled && g_eyeOfCthulhu) {
+    g_eyeOfCthulhu.render(g_camera.eye.elements);
+    // Reset normal matrix for static objects after Eye
+    let identityNormalMatrix = new Matrix4();
+    gl.uniformMatrix4fv(u_NormalMatrix, false, identityNormalMatrix.elements);
+  } else if (g_shapeToShow === 'sphere') {
+    let identityNormalMatrix = new Matrix4();
+    gl.uniformMatrix4fv(u_NormalMatrix, false, identityNormalMatrix.elements);
+    var sphere = new Sphere();
+    sphere.color = [1.0, 1.0, 1.0, 1.0];
+    sphere.textureNum = -2;
+    sphere.shininess = 10.0;
+    if (g_normalOn) { sphere.textureNum = -3; }
+    sphere.matrix.setIdentity();
+    sphere.matrix.translate(0.0, 5.0, 0.0);
+    sphere.matrix.scale(0.5, 0.5, 0.5);
+    sphere.render();
+  } else if (g_shapeToShow === 'cube') {
+    let identityNormalMatrix = new Matrix4();
+    gl.uniformMatrix4fv(u_NormalMatrix, false, identityNormalMatrix.elements);
+    var cube = new Cube();
+    cube.color = [1.0, 0.5, 0.2, 1.0];
+    cube.textureNum = -2;
+    if (g_normalOn) { cube.textureNum = -3; }
+    cube.matrix.setIdentity();
+    cube.matrix.translate(0.0, 5.0, 0.0);
+    cube.matrix.scale(1.0, 1.0, 1.0);
+    cube.renderFast();
+  }
 
   // 4. Draw transparent floor last
   var floor = new Cube();
@@ -546,19 +717,6 @@ function renderScene() {
   floor.matrix.scale(32.0, 0.001, 32.0); 
   floor.matrix.translate(-0.5, 0.0, -0.5); 
   floor.renderFast();
-
-  // 5. Draw Sphere
-  var sphere = new Sphere();
-  sphere.color = [1.0, 1.0, 1.0, 1.0];
-  sphere.textureNum = -2; // Color
-  sphere.shininess = 10.0; // Set shininess for specular highlights
-  if (g_normalOn) { sphere.textureNum = -3; } // Normal debugger
-  sphere.matrix.setIdentity();
-  sphere.matrix.translate(0.0, 5.0, 0.0); // Position the sphere above the floor
-  sphere.matrix.scale(0.5, 0.5, 0.5); // Scale the sphere
-  sphere.render();
-
-  
 
   // Performance test
   var duration = performance.now() - startTime;
