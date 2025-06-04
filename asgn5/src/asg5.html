@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Assignment 5 - Three.js Scene</title>
+    <style>
+      body { margin: 0; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #pixelToggle {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="pixelToggle">Toggle Pixel Effect</button>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@v0.177.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@v0.177.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="asg5.js"></script>
+  </body>
+</html>
