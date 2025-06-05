@@ -46,6 +46,31 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                         // Position airplane at origin
                         root.position.set(0, 0, 0);
                         
+                        // Add local axes helper to visualize airplane's coordinate system
+                        const localAxesHelper = new THREE.AxesHelper(2); // 2 is the length of the axes
+                        localAxesHelper.name = 'localAxes';
+                        root.add(localAxesHelper);  // Add to airplane so it moves with it
+                        
+                        // Attach spotlight to airplane
+                        const lights = scene.userData.lights;
+                        if (lights) {
+                            // Position spotlight at the front of the airplane
+                            lights.spotlight.position.set(0, 0.25, 1.25);
+                            // Make spotlight target follow the airplane's direction
+                            lights.spotTarget.position.set(0, 0.25, 15);  // Increased target distance
+                            
+                            // Set yellow color and high intensity
+                            lights.spotlight.color.setHex(0xEFC576);  // Warm yellow color
+                            lights.spotlight.intensity = 3000.0;
+                            
+                            // Add spotlight and target to the airplane
+                            root.add(lights.spotlight);
+                            root.add(lights.spotTarget);
+
+                            // Update spotlight helper
+                            lights.spotHelper.update();
+                        }
+
                         // Animation function for the plane
                         function animatePlane() {
                             // Control parameters
@@ -55,80 +80,80 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                             const returnSpeed = 0.97;       // How fast it returns to neutral
                             const yawFactor = 0.1;          // How much yaw occurs during roll
                             const easeStart = 0.7;          // Start easing at 70% of max angle
-
-                            // Store initial rotation
-                            const initialRotation = {
-                                x: root.rotation.x,
-                                y: root.rotation.y,
-                                z: root.rotation.z
-                            };
+                            let currentRoll = 0;            // Track current roll angle
 
                             function updatePlane() {
-                                // Handle roll (A and D)
-                                if (keys.a) {
-                                    if (root.rotation.z > -maxRoll) {
-                                        // Calculate easing factor
-                                        let easeFactor = 1.0;
-                                        if (Math.abs(root.rotation.z) > maxRoll * easeStart) {
-                                            easeFactor = 1 - (Math.abs(root.rotation.z) - maxRoll * easeStart) / (maxRoll * (1 - easeStart));
-                                        }
-
-                                        // Roll around local Z axis
-                                        const localZ = new THREE.Vector3(0, 0, 1);
-                                        root.rotateOnWorldAxis(localZ, -moveSpeed * easeFactor);
-                                        
-                                        // Yaw around local Y axis (opposite to roll)
-                                        const localY = new THREE.Vector3(0, 1, 0);
-                                        root.rotateOnWorldAxis(localY, moveSpeed * yawFactor * easeFactor);
-                                    }
-                                } else if (keys.d) {
-                                    if (root.rotation.z < maxRoll) {
-                                        // Calculate easing factor
-                                        let easeFactor = 1.0;
-                                        if (Math.abs(root.rotation.z) > maxRoll * easeStart) {
-                                            easeFactor = 1 - (Math.abs(root.rotation.z) - maxRoll * easeStart) / (maxRoll * (1 - easeStart));
-                                        }
-
-                                        // Roll around local Z axis
-                                        const localZ = new THREE.Vector3(0, 0, 1);
-                                        root.rotateOnWorldAxis(localZ, moveSpeed * easeFactor);
-                                        
-                                        // Yaw around local Y axis (opposite to roll)
-                                        const localY = new THREE.Vector3(0, 1, 0);
-                                        root.rotateOnWorldAxis(localY, -moveSpeed * yawFactor * easeFactor);
-                                    }
+                                // Handle combined movements first
+                                if (keys.a && keys.w) {
+                                    // Diagonal up-left movement
+                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, -maxRoll * 0.7, moveSpeed * 2.0);
+                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, -maxPitch * 0.7, moveSpeed * 2.0);
+                                    root.rotation.y += moveSpeed * 0.5; // Gentle turn left
+                                } else if (keys.d && keys.w) {
+                                    // Diagonal up-right movement
+                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, maxRoll * 0.7, moveSpeed * 2.0);
+                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, -maxPitch * 0.7, moveSpeed * 2.0);
+                                    root.rotation.y -= moveSpeed * 0.5; // Gentle turn right
+                                } else if (keys.a && keys.s) {
+                                    // Diagonal down-left movement
+                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, -maxRoll * 0.7, moveSpeed * 2.0);
+                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, maxPitch * 0.7, moveSpeed * 2.0);
+                                    root.rotation.y += moveSpeed * 0.5; // Gentle turn left
+                                } else if (keys.d && keys.s) {
+                                    // Diagonal down-right movement
+                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, maxRoll * 0.7, moveSpeed * 2.0);
+                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, maxPitch * 0.7, moveSpeed * 2.0);
+                                    root.rotation.y -= moveSpeed * 0.5; // Gentle turn right
                                 } else {
-                                    // Return roll and yaw to neutral
-                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, initialRotation.z, 1 - returnSpeed);
-                                    root.rotation.y = THREE.MathUtils.lerp(root.rotation.y, initialRotation.y, 1 - returnSpeed);
+                                    // --- YAW (A/D) ---
+                                    if (keys.a) {
+                                        // Use world Y axis for yaw
+                                        root.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), moveSpeed);
+                                    } else if (keys.d) {
+                                        // Use world Y axis for yaw
+                                        root.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), -moveSpeed);
+                                    }
+
+                                    // --- PITCH (W/S, true local axis) ---
+                                    const pitchSpeed = moveSpeed * 2.0;
+                                    if (keys.w) {
+                                        const pitchAxis = new THREE.Vector3(1, 0, 0);
+                                        root.rotateOnAxis(pitchAxis, -pitchSpeed);
+                                    } else if (keys.s) {
+                                        const pitchAxis = new THREE.Vector3(1, 0, 0);
+                                        root.rotateOnAxis(pitchAxis, pitchSpeed);
+                                    }
+
+                                    // --- ROLL (A/D, visual only) ---
+                                    if (keys.a) {
+                                        const rollAxis = new THREE.Vector3(0, 0, 1);
+                                        // Lerp the roll amount
+                                        const targetRoll = -maxRoll;
+                                        const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 2.0);
+                                        const rollDelta = newRoll - currentRoll; // Only apply the change
+                                        currentRoll = newRoll;
+                                        root.rotateOnAxis(rollAxis, rollDelta);
+                                    } else if (keys.d) {
+                                        const rollAxis = new THREE.Vector3(0, 0, 1);
+                                        // Lerp the roll amount
+                                        const targetRoll = maxRoll;
+                                        const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 2.0);
+                                        const rollDelta = newRoll - currentRoll; // Only apply the change
+                                        currentRoll = newRoll;
+                                        root.rotateOnAxis(rollAxis, rollDelta);
+                                    } else {
+                                        // Return to neutral
+                                        const rollAxis = new THREE.Vector3(0, 0, 1);
+                                        const newRoll = THREE.MathUtils.lerp(currentRoll, 0, moveSpeed * 3.0);
+                                        const rollDelta = newRoll - currentRoll; // Only apply the change
+                                        currentRoll = newRoll;
+                                        root.rotateOnAxis(rollAxis, rollDelta);
+                                    }
                                 }
 
-                                // Handle pitch (W and S)
-                                if (keys.w) {
-                                    // Calculate total pitch from initial position
-                                    const totalPitch = root.rotation.x - initialRotation.x;
-                                    if (totalPitch > -maxPitch) {
-                                        // Calculate easing factor
-                                        let easeFactor = 1.0;
-                                        if (Math.abs(totalPitch) > maxPitch * easeStart) {
-                                            easeFactor = 1 - (Math.abs(totalPitch) - maxPitch * easeStart) / (maxPitch * (1 - easeStart));
-                                        }
-                                        root.rotation.x -= moveSpeed * easeFactor;
-                                    }
-                                } else if (keys.s) {
-                                    // Calculate total pitch from initial position
-                                    const totalPitch = root.rotation.x - initialRotation.x;
-                                    if (totalPitch < maxPitch) {
-                                        // Calculate easing factor
-                                        let easeFactor = 1.0;
-                                        if (Math.abs(totalPitch) > maxPitch * easeStart) {
-                                            easeFactor = 1 - (Math.abs(totalPitch) - maxPitch * easeStart) / (maxPitch * (1 - easeStart));
-                                        }
-                                        root.rotation.x += moveSpeed * easeFactor;
-                                    }
-                                } else {
-                                    // Return pitch to neutral
-                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, initialRotation.x, 1 - returnSpeed);
+                                // Update spotlight helper to show current light direction
+                                if (scene.userData.lights) {
+                                    scene.userData.lights.spotHelper.update();
                                 }
 
                                 // Update terrain based on plane orientation
