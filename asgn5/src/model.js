@@ -67,6 +67,20 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                             root.add(lights.spotlight);
                             root.add(lights.spotTarget);
 
+                            // Create light cone effect
+                            const coneGeometry = new THREE.ConeGeometry(8, 20, 32);  // Smaller cone
+                            const coneMaterial = new THREE.MeshBasicMaterial({
+                                color: 0xEFC576,
+                                transparent: true,
+                                opacity: 0.08,
+                                side: THREE.BackSide,
+                                depthWrite: false
+                            });
+                            const lightCone = new THREE.Mesh(coneGeometry, coneMaterial);
+                            lightCone.rotation.x = -Math.PI / 2;  // Rotate to point forward
+                            lightCone.position.set(0, 0.25, 11);  // Position closer to the airplane
+                            root.add(lightCone);
+
                             // Update spotlight helper
                             lights.spotHelper.update();
                         }
