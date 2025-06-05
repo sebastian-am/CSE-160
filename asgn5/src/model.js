@@ -81,30 +81,11 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                             const yawFactor = 0.1;          // How much yaw occurs during roll
                             const easeStart = 0.7;          // Start easing at 70% of max angle
                             let currentRoll = 0;            // Track current roll angle
+                            let currentPitch = 0;           // Track current pitch angle
 
                             function updatePlane() {
                                 // Handle combined movements first
-                                if (keys.a && keys.w) {
-                                    // Diagonal up-left movement
-                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, -maxRoll * 0.7, moveSpeed * 2.0);
-                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, -maxPitch * 0.7, moveSpeed * 2.0);
-                                    root.rotation.y += moveSpeed * 0.5; // Gentle turn left
-                                } else if (keys.d && keys.w) {
-                                    // Diagonal up-right movement
-                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, maxRoll * 0.7, moveSpeed * 2.0);
-                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, -maxPitch * 0.7, moveSpeed * 2.0);
-                                    root.rotation.y -= moveSpeed * 0.5; // Gentle turn right
-                                } else if (keys.a && keys.s) {
-                                    // Diagonal down-left movement
-                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, -maxRoll * 0.7, moveSpeed * 2.0);
-                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, maxPitch * 0.7, moveSpeed * 2.0);
-                                    root.rotation.y += moveSpeed * 0.5; // Gentle turn left
-                                } else if (keys.d && keys.s) {
-                                    // Diagonal down-right movement
-                                    root.rotation.z = THREE.MathUtils.lerp(root.rotation.z, maxRoll * 0.7, moveSpeed * 2.0);
-                                    root.rotation.x = THREE.MathUtils.lerp(root.rotation.x, maxPitch * 0.7, moveSpeed * 2.0);
-                                    root.rotation.y -= moveSpeed * 0.5; // Gentle turn right
-                                } else {
+                                
                                     // --- YAW (A/D) ---
                                     if (keys.a) {
                                         // Use world Y axis for yaw
@@ -118,10 +99,27 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                                     const pitchSpeed = moveSpeed * 2.0;
                                     if (keys.w) {
                                         const pitchAxis = new THREE.Vector3(1, 0, 0);
-                                        root.rotateOnAxis(pitchAxis, -pitchSpeed);
+                                        // Lerp the pitch amount
+                                        const targetPitch = -maxPitch;
+                                        const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 2.0);
+                                        const pitchDelta = newPitch - currentPitch;
+                                        currentPitch = newPitch;
+                                        root.rotateOnAxis(pitchAxis, pitchDelta);
                                     } else if (keys.s) {
                                         const pitchAxis = new THREE.Vector3(1, 0, 0);
-                                        root.rotateOnAxis(pitchAxis, pitchSpeed);
+                                        // Lerp the pitch amount
+                                        const targetPitch = maxPitch;
+                                        const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 2.0);
+                                        const pitchDelta = newPitch - currentPitch;
+                                        currentPitch = newPitch;
+                                        root.rotateOnAxis(pitchAxis, pitchDelta);
+                                    } else {
+                                        // Return to neutral
+                                        const pitchAxis = new THREE.Vector3(1, 0, 0);
+                                        const newPitch = THREE.MathUtils.lerp(currentPitch, 0, moveSpeed * 3.0);
+                                        const pitchDelta = newPitch - currentPitch;
+                                        currentPitch = newPitch;
+                                        root.rotateOnAxis(pitchAxis, pitchDelta);
                                     }
 
                                     // --- ROLL (A/D, visual only) ---
@@ -149,7 +147,7 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                                         currentRoll = newRoll;
                                         root.rotateOnAxis(rollAxis, rollDelta);
                                     }
-                                }
+                                
 
                                 // Update spotlight helper to show current light direction
                                 if (scene.userData.lights) {
