@@ -43,22 +43,15 @@ function updateTerrain(plane, noiseOffset, terrainPlane) {
     const baseSpeed = 0.25;
     const currentSpeed = baseSpeed * (1/4); // Normalize to 60fps
 
-    // Get the plane's forward direction based on Y rotation (yaw) and X rotation (pitch)
-    const yaw = plane.rotation.y;
-    const pitch = plane.rotation.x;
-
-    // Calculate forward vector with proper pitch and yaw
-    const forwardVector = new THREE.Vector3(
-        -Math.sin(yaw) * Math.cos(pitch),
-        -Math.sin(pitch), // Invert pitch to match terrain movement
-        Math.cos(yaw) * Math.cos(pitch)
-    );
+    
+    const forwardVector = new THREE.Vector3(0, 0, 1);
+    forwardVector.applyQuaternion(plane.quaternion); //quaternions used to store rotations without gimbal lock, based on plane's rot in model.js
     forwardVector.normalize();
 
     // Update noise offset based on plane's direction
-    noiseOffset.x -= forwardVector.x * currentSpeed;
-    noiseOffset.z -= forwardVector.z * currentSpeed;
-    noiseOffset.y = (noiseOffset.y || 0) - forwardVector.y * currentSpeed; // Add vertical movement
+    noiseOffset.x += forwardVector.x * currentSpeed;
+    noiseOffset.z -= forwardVector.z * currentSpeed;  // Negative to make terrain move towards plane
+    noiseOffset.y = (noiseOffset.y || 0) - forwardVector.y * currentSpeed;
     
     // Update terrain vertices with noise
     const vertices = terrainPlane.geometry.attributes.position.array;
