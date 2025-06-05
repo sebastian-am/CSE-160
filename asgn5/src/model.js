@@ -3,7 +3,6 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { updateTerrain } from './terrain.js';
 
-// Track keyboard state
 const keys = {
     a: false,
     d: false,

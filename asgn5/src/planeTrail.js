@@ -4,6 +4,31 @@ import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
 // Create noise generator with fixed seed for consistency
 const noise2D = createNoise2D();
 
+// Create noise texture for smoke
+const createNoiseTexture = () => {
+    const size = 64;
+    const data = new Uint8Array(size * size * 4);
+    
+    // Add random offset to make each texture unique
+    const offsetX = Math.random() * 1000;
+    const offsetY = Math.random() * 1000;
+    
+    for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+            const index = (i * size + j) * 4;
+            const noise = (noise2D((i + offsetX) * 0.05, (j + offsetY) * 0.05) + 1) * 0.5;
+            data[index] = 255;     // R
+            data[index + 1] = 255; // G
+            data[index + 2] = 255; // B
+            data[index + 3] = noise * 255; // A - use noise for opacity
+        }
+    }
+    
+    const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    texture.needsUpdate = true;
+    return texture;
+};
+
 // Terrain configuration (matching terrain.js)
 const HEIGHT_SCALE = 50;  // Height amplitude
 const NOISE_SCALE = 0.01;  // Base frequency
@@ -50,7 +75,9 @@ function createTrailParticle(x, y, z) {
         opacity: 0.8,
         roughness: 0.7,
         metalness: 0.2,
-        depthWrite: false
+        depthWrite: false,
+        map: createNoiseTexture(),
+        alphaMap: createNoiseTexture()
     });
 
     const particle = new THREE.Mesh(geometry, material);

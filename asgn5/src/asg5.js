@@ -8,14 +8,11 @@ import * as THREE from 'three';
 import { camera, controls } from './camera.js';
 import { createSkybox } from './skybox.js';
 import { loadAirplane } from './model.js';
-import { updateTerrain, TERRAIN_CONFIG } from './terrain.js';
+import { updateTerrain, TERRAIN_CONFIG, createTerrainPlane } from './terrain.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { initializeClouds, updateClouds } from './clouds.js';
 import { updateTrail, clearTrail } from './planeTrail.js';
 
@@ -26,22 +23,19 @@ import { updateTrail, clearTrail } from './planeTrail.js';
 /** @type {THREE.WebGLRenderer} */ let renderer;
 /** @type {THREE.EffectComposer} */ let composer;
 /** @type {THREE.RenderPixelatedPass} */ let pixelPass;
-/** @type {boolean} */ let g_pixelEnabled = true;
 /** @type {number} */ let g_pixelSize = 7;
 /** @type {Object} */ let noiseOffset = { x: 0, z: 0 };
-/** @type {THREE.PlaneGeometry} */ let planeGeometry;
 /** @type {THREE.Mesh} */ let plane;
-/** @type {Function} */ let noise2D;
 
 // Lighting configuration
 const LIGHT_CONFIG = {
     AMBIENT: {
         color: 0x404040,
-        intensity: 0.5
+        intensity: 0.8
     },
     DIRECTIONAL: {
         color: 0xffffff,
-        intensity: 0.8,
+        intensity: 1.0,
         position: { x: 5, y: 5, z: 5 }
     },
     HEMISPHERE: {
@@ -133,75 +127,9 @@ function main() {
     // Setup lighting
     setupLighting();
 
-    // Create a simple plane
-    planeGeometry = new THREE.PlaneGeometry(500, 500, 75, 75);
-    const planeMaterial = new THREE.MeshStandardMaterial({
-        color: 0x808080,  // Default grey color
-        side: THREE.DoubleSide,
-        roughness: 0.9,   // Back to original roughness
-        metalness: 0.0,   // Back to no metalness
-        flatShading: true,
-        vertexColors: true
-    });
-
-    // Create a noise2D function using the imported createNoise2D
-    noise2D = createNoise2D();
-
-    // Create color array for vertices
-    const colors = new Float32Array(planeGeometry.attributes.position.count * 3);
-
-    // Add simplex noise to the plane vertices
-    const vertices = planeGeometry.attributes.position.array;
-    for (let i = 0; i < vertices.length; i += 3) {
-        const x = vertices[i];
-        const y = vertices[i + 1];
-        // Use multiple layers of noise for more jagged terrain
-        const noise1 = noise2D((x + noiseOffset.x) * 0.008, (y + noiseOffset.z) * 0.008) * 60;  // Large features
-        const noise2 = noise2D((x + noiseOffset.x) * 0.02, (y + noiseOffset.z) * 0.02) * 20;   // Medium features
-        const noise3 = noise2D((x + noiseOffset.x) * 0.04, (y + noiseOffset.z) * 0.04) * 5;    // Small features
-        const noise4 = noise2D((x + noiseOffset.x) * 0.08, (y + noiseOffset.z) * 0.08) * 2;    // Very small features
-        let height = noise1 + noise2 + noise3 + noise4;
-        
-        // Clamp height to water level if below it
-        const isWater = height < TERRAIN_CONFIG.WATER_LEVEL;
-        if (isWater) {
-            height = TERRAIN_CONFIG.WATER_LEVEL;
-        }
-        
-        // Set vertex height
-        vertices[i + 2] = height;
-        
-        // Set vertex color based on height
-        let color;
-        if (isWater) {
-            // Water - use water color regardless of height when it's water
-            color = TERRAIN_CONFIG.COLORS.WATER;
-        } else if (height < TERRAIN_CONFIG.GRASS_HEIGHT) {
-            // Grass
-            color = TERRAIN_CONFIG.COLORS.GRASS;
-        } else if (height > TERRAIN_CONFIG.SNOW_START) {
-            // Snow
-            color = TERRAIN_CONFIG.COLORS.SNOW;
-        } else {
-            // Rock
-            color = TERRAIN_CONFIG.COLORS.ROCK;
-        }
-        
-        colors[i] = color.r;
-        colors[i + 1] = color.g;
-        colors[i + 2] = color.b;
-    }
-    
-    // Add colors to geometry
-    planeGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    planeGeometry.attributes.position.needsUpdate = true;
-    planeGeometry.computeVertexNormals();
-
-    plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    plane.rotation.x = -Math.PI / 2;
-    plane.position.y = -5;
-    scene.add(plane);
-    console.log('Plane created and added to scene:', plane);
+    // Create terrain plane
+    plane = createTerrainPlane(scene, noiseOffset);
+    console.log('Terrain plane created and added to scene:', plane);
 
     // Load the airplane model
     loadAirplane(scene, camera, controls, noiseOffset, plane).then(root => {
@@ -210,12 +138,6 @@ function main() {
 
     // Initialize clouds
     initializeClouds(scene);
-
-    // Setup pixel effect toggle
-    document.getElementById("pixelToggle").onclick = function() {
-        g_pixelEnabled = !g_pixelEnabled;
-        pixelPass.enabled = g_pixelEnabled;
-    };
 
     // Start animation
     animate(0);
