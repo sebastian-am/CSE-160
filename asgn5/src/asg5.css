@@ -1,0 +1,22 @@
+.slider-container {
+    width: 100%;
+    padding: 10px;
+}
+
+.slider-wrapper {
+    width: 100%;
+    padding: 10px 0;
+}
+
+.slider-wrapper input[type="range"] {
+    width: 100%;
+    min-width: 300px;
+    margin: 10px 0;
+}
+
+.menu-item {
+    padding: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    width: 100%;
+} 

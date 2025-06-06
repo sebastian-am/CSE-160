@@ -7,8 +7,20 @@
 import * as THREE from 'three';
 import { camera, controls } from './camera.js';
 import { createSkybox } from './skybox.js';
-import { loadAirplane } from './model.js';
-import { updateTerrain, TERRAIN_CONFIG, createTerrainPlane } from './terrain.js';
+import { 
+    loadAirplane, 
+    handleRollAndYaw, 
+    handlePitch, 
+    handleFlashlight, 
+    maxRoll, 
+    maxPitch, 
+    moveSpeed,
+    getCurrentRoll,
+    setCurrentRoll,
+    getCurrentPitch,
+    setCurrentPitch
+} from './airplane.js';
+import { updateTerrain, createTerrainPlane } from './terrain.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
@@ -27,60 +39,59 @@ import { updateTrail, clearTrail } from './planeTrail.js';
 /** @type {Object} */ let noiseOffset = { x: 0, z: 0 };
 /** @type {THREE.Mesh} */ let plane;
 
+// Add speed multiplier to global variables
+/** @type {number} */ let speedMultiplier = 2.0;  // Default to 2x speed
+
+// Key state tracking
+/** @type {Object} */ let keyStates = {
+    w: false,
+    a: false,
+    s: false,
+    d: false,
+    f: false
+};
+
+export { speedMultiplier }; // for terrain, clouds, and smoke trial
+
 // Lighting configuration
-const LIGHT_CONFIG = {
+export const LIGHT_CONFIG = {
     AMBIENT: {
-        color: 0x404040,
+        color: 0x404040, // gray     
         intensity: 0.8
     },
     DIRECTIONAL: {
-        color: 0xffffff,
+        color: 0xffffff, // white
         intensity: 1.0,
         position: { x: 5, y: 5, z: 5 }
     },
     HEMISPHERE: {
-        skyColor: 0xffffff,
-        groundColor: 0x444444,
+        skyColor: 0xffffff, // white
+        groundColor: 0x444444, // dark gray
         intensity: 0.6
     },
     SPOTLIGHT: {
-        color: 0xffffff,
-        intensity: 5,        // Increased intensity
-        distance: 50,          // Reduced distance for more focused light
-        angle: Math.PI / 8,    // Reduced angle to 22.5 degrees for tighter beam
-        penumbra: 0.3,         // Reduced penumbra for sharper edges
-        decay: 2               // Increased decay for more realistic falloff
+        color: 0xEFC576, // warm yellow
+        intensity: 3000.0,
+        distance: 50,         
+        angle: Math.PI / 8,   
+        penumbra: 0.3,        
+        decay: 2,
+        position: { x: 0, y: 0.25, z: 1.25 },
+        targetPosition: { x: 0, y: 0.25, z: 15 },
+        coneGeometry: {
+            radius: 8,
+            height: 20,
+            segments: 32
+        },
+        coneMaterial: {
+            opacity: 0.08,
+            side: 'BackSide',
+            depthWrite: false
+        },
+        conePosition: { x: 0, y: 0.25, z: 11 }
     }
 };
 
-// Add FogGUIHelper class before main()
-class FogGUIHelper {
-    constructor(fog, backgroundColor) {
-        this.fog = fog;
-        this.backgroundColor = backgroundColor;
-    }
-    get near() {
-        return this.fog.near;
-    }
-    set near(v) {
-        this.fog.near = v;
-        this.fog.far = Math.max(this.fog.far, v);
-    }
-    get far() {
-        return this.fog.far;
-    }
-    set far(v) {
-        this.fog.far = v;
-        this.fog.near = Math.min(this.fog.near, v);
-    }
-    get color() {
-        return `#${this.fog.color.getHexString()}`;
-    }
-    set color(hexString) {
-        this.fog.color.set(hexString);
-        this.backgroundColor.set(hexString);
-    }
-}
 
 //===============================================
 // Main
@@ -89,17 +100,18 @@ function main() {
     // Scene setup
     scene = new THREE.Scene();
 
-    // Add fog
     {
-        // Light fog for light interaction
         const lightFogColor = new THREE.Color('white');
-        const lightFogDensity = 0.003;  // Much lighter fog for subtle light interaction
+        const lightFogDensity = 0.003;
         scene.fog = new THREE.FogExp2(lightFogColor, lightFogDensity);
 
         // Background color for distance blending
         const backgroundColor = new THREE.Color('lightblue');
         scene.background = backgroundColor;
     }
+
+    // Clear any existing trail particles
+    clearTrail(scene);
 
     // Create skybox
     createSkybox(scene);
@@ -111,8 +123,7 @@ function main() {
 
     // Post-processing setup
     composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, camera);
-    composer.addPass(renderPass);
+    composer.addPass(new RenderPass(scene, camera));
 
     // Add pixel shader pass
     pixelPass = new RenderPixelatedPass(g_pixelSize, scene, camera);
@@ -121,37 +132,36 @@ function main() {
     composer.addPass(pixelPass);
 
     // Add output pass
-    const outputPass = new OutputPass();
-    composer.addPass(outputPass);
+    composer.addPass(new OutputPass());
 
     // Setup lighting
     setupLighting();
 
+    // Setup menu
+    setupMenu();
+
     // Create terrain plane
     plane = createTerrainPlane(scene, noiseOffset);
-    console.log('Terrain plane created and added to scene:', plane);
 
     // Load the airplane model
-    loadAirplane(scene, camera, controls, noiseOffset, plane).then(root => {
-        console.log('Airplane loaded successfully');
-    });
+    loadAirplane(scene, camera, controls, noiseOffset, plane);
 
     // Initialize clouds
     initializeClouds(scene);
-
-    // Start animation
-    animate(0);
+    
+    animate();
 }
 
+//===============================================
+// Lighting Setup
+//===============================================
 function setupLighting() {
-    // Ambient Light
     const ambientLight = new THREE.AmbientLight(
         LIGHT_CONFIG.AMBIENT.color,
         LIGHT_CONFIG.AMBIENT.intensity
     );
     scene.add(ambientLight);
 
-    // Directional Light (sun)
     const directionalLight = new THREE.DirectionalLight(
         LIGHT_CONFIG.DIRECTIONAL.color,
         LIGHT_CONFIG.DIRECTIONAL.intensity
@@ -163,7 +173,6 @@ function setupLighting() {
     );
     scene.add(directionalLight);
 
-    // Hemisphere Light
     const hemisphereLight = new THREE.HemisphereLight(
         LIGHT_CONFIG.HEMISPHERE.skyColor,
         LIGHT_CONFIG.HEMISPHERE.groundColor,
@@ -171,11 +180,9 @@ function setupLighting() {
     );
     scene.add(hemisphereLight);
 
-    // Create spotlight target
     const spotTarget = new THREE.Object3D();
     scene.add(spotTarget);
 
-    // Spotlight
     const spotlight = new THREE.SpotLight(
         LIGHT_CONFIG.SPOTLIGHT.color,
         LIGHT_CONFIG.SPOTLIGHT.intensity,
@@ -188,34 +195,184 @@ function setupLighting() {
     scene.add(spotlight);
     scene.add(spotlight.target);
 
-    // Add spotlight helper for debugging
-    const spotHelper = new THREE.SpotLightHelper(spotlight);
-    scene.add(spotHelper);
-
-    // Store lights in scene for later access
+    // Storing lights in scene for later access
     scene.userData.lights = {
         spotlight,
-        spotTarget,
-        spotHelper
+        spotTarget
     };
+}
+
+//===============================================
+// Menu Setup
+//===============================================
+function setupMenu() {
+    const menu = document.getElementById('escapeMenu');
+    const hamburger = document.getElementById('hamburger');
+    const externalSourcesBtn = document.getElementById('externalSourcesBtn');
+    const externalSourcesContent = document.getElementById('externalSourcesContent');
+    const notesBtn = document.getElementById('notesBtn');
+    const notesContent = document.getElementById('notesContent');
+    const controlsBtn = document.getElementById('controlsBtn');
+    const controlsContent = document.getElementById('controlsContent');
+    let isMenuVisible = false;
+    let isFlashlightOn = true;
+    let isAxisVisible = false;
+
+    function toggleMenu() {
+        isMenuVisible = !isMenuVisible;
+        menu.classList.toggle('visible');
+        hamburger.classList.toggle('active');
+        controls.enabled = !isMenuVisible;
+        
+        // Close dropdowns when closing menu
+        if (!isMenuVisible) {
+            externalSourcesContent.classList.remove('visible');
+            notesContent.classList.remove('visible');
+            controlsContent.classList.remove('visible');
+            externalSourcesBtn.classList.remove('active');
+            notesBtn.classList.remove('active');
+            controlsBtn.classList.remove('active');
+        }
+    }
+
+    // Add speed slider handler
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    
+    speedSlider.addEventListener('input', (event) => {
+        speedMultiplier = parseFloat(event.target.value);
+        speedValue.textContent = speedMultiplier + 'x';
+    });
+
+    // Handle escape key and menu click
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            toggleMenu();
+        } else if (event.key.toLowerCase() === 'f') {
+            // Toggle flashlight
+            isFlashlightOn = !isFlashlightOn;
+            const airplane = scene.getObjectByName('airplane');
+            if (airplane) {
+                const lightCone = airplane.getObjectByName('lightCone');
+                if (lightCone) {
+                    lightCone.visible = isFlashlightOn;
+                }
+                const spotlight = scene.userData.lights.spotlight;
+                if (spotlight) {
+                    spotlight.visible = isFlashlightOn;
+                }
+                // Clear trail when toggling flashlight
+                clearTrail(scene);
+            }
+        }
+    });
+
+    // Add key state tracking
+    window.addEventListener('keydown', (event) => {
+        const key = event.key.toLowerCase();
+        if (key in keyStates) {
+            keyStates[key] = true;
+        }
+    });
+
+    window.addEventListener('keyup', (event) => {
+        const key = event.key.toLowerCase();
+        if (key in keyStates) {
+            keyStates[key] = false;
+        }
+    });
+
+    hamburger.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleMenu();
+    });
+
+    // Handle dropdown clicks
+    externalSourcesBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        externalSourcesContent.classList.toggle('visible');
+        externalSourcesBtn.classList.toggle('active');
+        notesContent.classList.remove('visible');
+        notesBtn.classList.remove('active');
+        controlsContent.classList.remove('visible');
+        controlsBtn.classList.remove('active');
+    });
+
+    notesBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        notesContent.classList.toggle('visible');
+        notesBtn.classList.toggle('active');
+        externalSourcesContent.classList.remove('visible');
+        externalSourcesBtn.classList.remove('active');
+        controlsContent.classList.remove('visible');
+        controlsBtn.classList.remove('active');
+    });
+
+    controlsBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        controlsContent.classList.toggle('visible');
+        controlsBtn.classList.toggle('active');
+        externalSourcesContent.classList.remove('visible');
+        externalSourcesBtn.classList.remove('active');
+        notesContent.classList.remove('visible');
+        notesBtn.classList.remove('active');
+    });
+
+    // Menu item handlers
+    document.getElementById('toggleFog').addEventListener('click', () => {
+        scene.fog = scene.fog ? null : new THREE.FogExp2(0xffffff, 0.003);
+    });
+
+    document.getElementById('toggleAxis').addEventListener('click', () => {
+        isAxisVisible = !isAxisVisible;
+        const globalAxes = scene.getObjectByName('axesHelper');
+        const localAxes = scene.getObjectByName('localAxes');
+        
+        if (globalAxes) {
+            globalAxes.visible = isAxisVisible;
+        }
+        if (localAxes) {
+            localAxes.visible = isAxisVisible;
+        }
+    });
+
+    window.addEventListener('click', (event) => { // Close menu when clicking outside
+        if (isMenuVisible && event.target === menu) {
+            toggleMenu();
+        }
+    });
 }
 
 //===============================================
 // Animation and Rendering
 //===============================================
-function animate(currentTime) {
+function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
     // Update terrain if airplane is loaded
     const airplane = scene.getObjectByName('airplane');
     if (airplane) {
-        console.log('Airplane loaded, updating terrain');
+        // Handle all movement controls
+        const newRoll = handleRollAndYaw(airplane, keyStates, moveSpeed, maxRoll, getCurrentRoll());
+        setCurrentRoll(newRoll);
+        const newPitch = handlePitch(airplane, keyStates, moveSpeed, maxPitch, getCurrentPitch());
+        setCurrentPitch(newPitch);
+        handleFlashlight(airplane, keyStates, scene.userData.lights);
+
+        // Update terrain, clouds, and smoke trail based on plane orientation
         updateTerrain(airplane, noiseOffset, plane);
-        updateClouds(scene, noiseOffset);  // Update clouds with terrain movement
-        updateTrail(scene, airplane, noiseOffset);  // Update airplane trail with terrain movement
-    } else {
-        console.log('Airplane not loaded yet');
+        updateClouds(scene, noiseOffset);
+        updateTrail(scene, airplane, noiseOffset);
+
+        // Only update camera position if we're not in free orbit mode
+        if (!controls.enabled) {
+            const cameraOffset = new THREE.Vector3(0, 2, -8);
+            cameraOffset.applyQuaternion(airplane.quaternion);
+            camera.position.copy(airplane.position).add(cameraOffset);
+            camera.lookAt(airplane.position);
+        }
     }
 
     composer.render();
@@ -243,27 +400,6 @@ window.addEventListener('resize', () => {
         camera.updateProjectionMatrix();
     }
 });
-
-// Helper function to calculate terrain height at a point
-function calculateTerrainHeight(x, z, noiseOffset) {
-    const worldX = x + noiseOffset.x;
-    const worldZ = z + noiseOffset.z;
-    
-    // Generate terrain height using multiple octaves of noise
-    const noise1 = noise2D(worldX * 0.008, worldZ * 0.008) * 60;  // Large features
-    const noise2 = noise2D(worldX * 0.02, worldZ * 0.02) * 20;   // Medium features
-    const noise3 = noise2D(worldX * 0.04, worldZ * 0.04) * 5;    // Small features
-    const noise4 = noise2D(worldX * 0.08, worldZ * 0.08) * 2;    // Very small features
-    
-    let height = noise1 + noise2 + noise3 + noise4;
-    
-    // Clamp height to water level if below it
-    if (height < TERRAIN_CONFIG.WATER_LEVEL) {
-        height = TERRAIN_CONFIG.WATER_LEVEL;
-    }
-    
-    return height;
-}
 
 // Start the application
 main();
