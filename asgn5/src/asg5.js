@@ -401,5 +401,4 @@ window.addEventListener('resize', () => {
     }
 });
 
-// Start the application
 main();
