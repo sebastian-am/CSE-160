@@ -1,15 +1,34 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
 
-// Create noise generator with fixed seed for consistency
-const noise2D = createNoise2D();
+//===============================================
+// Global Variables
+//===============================================
+/** @type {Array<THREE.Mesh>} */ let trailParticles = [];  // Array to track active trail particles
+/** @type {number} */ let lastSpawnTime = 0;    // Track last spawn time
+/** @type {Object} */ let lastNoiseOffset = { x: 0, z: 0 };  // Track last offset for smooth movement
 
-// Create noise texture for smoke
+// Constants and Configuration
+const TRAIL_CONFIG = {
+    MAX_PARTICLES: 50,            // Maximum number of trail particles
+    SPAWN_INTERVAL: 100,          // Milliseconds between spawns
+    LIFETIME: 2000,               // How long each particle lives (ms)
+    SIZE: { min: 0.3, max: 0.5 }, // Size range for trail particles
+    COLOR: 0xE0E0E0,              // Light grey color
+    FADE_START: 0.7,              // When to start fading (percentage of lifetime)
+    SPAWN_DISTANCE: -1,           // Distance behind airplane to spawn particles
+    SPAWN_OFFSET: { y: -0.5 },    // Vertical offset relative to spawn position
+    POSITION_VARIANCE: 0.3,       // How much to vary x,y position
+    MOVE_SPEED: 1.0 * (1/2)       // Match terrain speed normalization
+};
+
+// Helper Functions
+const noise2D = createNoise2D();
 const createNoiseTexture = () => {
     const size = 64;
     const data = new Uint8Array(size * size * 4);
     
-    // Add random offset to make each texture unique
+    // randomize offset
     const offsetX = Math.random() * 1000;
     const offsetY = Math.random() * 1000;
     
@@ -20,7 +39,7 @@ const createNoiseTexture = () => {
             data[index] = 255;     // R
             data[index + 1] = 255; // G
             data[index + 2] = 255; // B
-            data[index + 3] = noise * 255; // A - use noise for opacity
+            data[index + 3] = noise * 255; // A - opacity
         }
     }
     
@@ -28,44 +47,6 @@ const createNoiseTexture = () => {
     texture.needsUpdate = true;
     return texture;
 };
-
-// Terrain configuration (matching terrain.js)
-const HEIGHT_SCALE = 50;  // Height amplitude
-const NOISE_SCALE = 0.01;  // Base frequency
-const DISTANCE_SCALE = 0.005;  // Controls distance between major features
-
-// Trail management
-export const TRAIL_CONFIG = {
-    MAX_PARTICLES: 50,     // Maximum number of trail particles
-    SPAWN_INTERVAL: 100,   // Milliseconds between spawns
-    LIFETIME: 2000,        // How long each particle lives (ms)
-    SIZE: { min: 0.3, max: 0.5 },  // Size range for trail particles
-    COLOR: 0xE0E0E0,       // Light grey color
-    FADE_START: 0.7,       // When to start fading (percentage of lifetime)
-    SPAWN_DISTANCE: -1,    // Distance behind airplane to spawn particles
-    SPAWN_OFFSET: { y: -0.5 },  // Vertical offset relative to spawn position
-    POSITION_VARIANCE: 0.3,  // How much to vary x,y position
-    MOVE_SPEED: 1.0 * (1/2)  // Match terrain speed normalization
-};
-
-let trailParticles = [];  // Array to track active trail particles
-let lastSpawnTime = 0;    // Track last spawn time
-let lastNoiseOffset = { x: 0, z: 0 };  // Track last offset for smooth movement
-
-function calculateTerrainHeight(x, z, noiseOffset) {
-    // Calculate world position
-    const worldX = x + noiseOffset.x;
-    const worldZ = z + noiseOffset.z;
-    
-    // Generate terrain height using multiple octaves of noise (matching terrain.js)
-    const noise1 = noise2D(worldX * DISTANCE_SCALE, worldZ * DISTANCE_SCALE) * HEIGHT_SCALE;
-    const noise2 = noise2D(worldX * NOISE_SCALE, worldZ * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
-    const noise3 = noise2D(worldX * NOISE_SCALE * 2, worldZ * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
-    const noise4 = noise2D(worldX * NOISE_SCALE * 4, worldZ * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
-    
-    return noise1 + noise2 + noise3 + noise4;
-}
-
 function createTrailParticle(x, y, z) {
     const size = Math.random() * (TRAIL_CONFIG.SIZE.max - TRAIL_CONFIG.SIZE.min) + TRAIL_CONFIG.SIZE.min;
     const geometry = new THREE.BoxGeometry(size, size, size);
@@ -86,6 +67,9 @@ function createTrailParticle(x, y, z) {
     return particle;
 }
 
+//===============================================
+// Main Functions
+//===============================================
 export function updateTrail(scene, airplane, noiseOffset) {
     if (!airplane) return;
 
@@ -94,7 +78,7 @@ export function updateTrail(scene, airplane, noiseOffset) {
     // Calculate the change in offset
     const deltaX = noiseOffset.x - lastNoiseOffset.x;
     const deltaZ = noiseOffset.z - lastNoiseOffset.z;
-    const deltaY = (noiseOffset.y || 0) - (lastNoiseOffset.y || 0);  // Track y offset changes
+    const deltaY = (noiseOffset.y || 0) - (lastNoiseOffset.y || 0);
     lastNoiseOffset.x = noiseOffset.x;
     lastNoiseOffset.z = noiseOffset.z;
     lastNoiseOffset.y = noiseOffset.y || 0;
@@ -134,7 +118,7 @@ export function updateTrail(scene, airplane, noiseOffset) {
         // Move particles with terrain
         particle.position.x -= deltaX * TRAIL_CONFIG.MOVE_SPEED;
         particle.position.z += deltaZ * TRAIL_CONFIG.MOVE_SPEED;
-        particle.position.y += deltaY * TRAIL_CONFIG.MOVE_SPEED;  // Changed sign to match terrain movement
+        particle.position.y += deltaY * TRAIL_CONFIG.MOVE_SPEED;
 
         const age = currentTime - particle.userData.createdAt;
         const lifetimeRatio = age / TRAIL_CONFIG.LIFETIME;

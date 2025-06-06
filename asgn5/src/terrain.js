@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
+import { speedMultiplier } from './asg5.js';
 
-// Create noise generator with fixed seed for consistency
-const noise2D = createNoise2D();
 
 // Flight physics configuration
 const FLIGHT_CONFIG = {
@@ -23,22 +22,62 @@ const DISTANCE_SCALE = 0.005;  // Controls distance between major features
 // Terrain color configuration
 export const TERRAIN_CONFIG = {
     WATER_LEVEL: -35,      // Water level
-    GRASS_HEIGHT: -20,     // Height where grass ends (moved up to create rock zone)
+    GRASS_HEIGHT: -25,     // Height where grass ends (moved up to create rock zone)
     SNOW_START: 35,        // Height where snow begins
     COLORS: {
         WATER: new THREE.Color(0x0077be),    // Deep blue
         GRASS: new THREE.Color(0x228B22),    // Forest green
-        SNOW: new THREE.Color(0xFFFFFF).multiplyScalar(5),  // Much brighter white
+        SNOW: new THREE.Color(0xFFFFFF).multiplyScalar(5),  // Very brighter white
         ROCK: new THREE.Color(0x808080)      // Grey
     }
 };
 
+// Helper function to determine terrain color based on height
+function getTerrainColor(height) {
+    if (height < TERRAIN_CONFIG.GRASS_HEIGHT - 9.99) {  // Water is 10 units below grass height
+        return TERRAIN_CONFIG.COLORS.WATER;
+    } else if (height < TERRAIN_CONFIG.GRASS_HEIGHT) {
+        return TERRAIN_CONFIG.COLORS.GRASS;
+    } else if (height > TERRAIN_CONFIG.SNOW_START) {
+        return TERRAIN_CONFIG.COLORS.SNOW;
+    } else {
+        return TERRAIN_CONFIG.COLORS.ROCK;
+    }
+}
+
+// Helper function to set color in the colors array
+function setColorInArray(colors, index, color) {
+    colors[index] = color.r;
+    colors[index + 1] = color.g;
+    colors[index + 2] = color.b;
+}
+
+// Helper function to calculate terrain height using noise
+function calculateTerrainHeight(x, z, noiseOffset) {
+    const worldX = x + noiseOffset.x;
+    const worldZ = z + noiseOffset.z;
+    
+    const noise1 = noise2D(worldX * DISTANCE_SCALE, worldZ * DISTANCE_SCALE) * HEIGHT_SCALE;
+    const noise2 = noise2D(worldX * NOISE_SCALE, worldZ * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
+    const noise3 = noise2D(worldX * NOISE_SCALE * 2, worldZ * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
+    const noise4 = noise2D(worldX * NOISE_SCALE * 4, worldZ * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
+
+    let baseHeight = noise1 + noise2 + noise3 + noise4;
+    
+    // Handle water level
+    if (baseHeight < TERRAIN_CONFIG.WATER_LEVEL) {
+        baseHeight = TERRAIN_CONFIG.WATER_LEVEL;
+    }
+    
+    return baseHeight;
+}
+
 // Create the terrain plane
+const noise2D = createNoise2D();
 export function createTerrainPlane(scene, noiseOffset) {
-    // Create plane geometry
     const planeGeometry = new THREE.PlaneGeometry(500, 500, 75, 75);
     const planeMaterial = new THREE.MeshStandardMaterial({
-        color: 0x808080,  // Default grey color
+        color: 0x808080,
         side: THREE.DoubleSide,
         roughness: 0.9,
         metalness: 0.0,
@@ -46,144 +85,66 @@ export function createTerrainPlane(scene, noiseOffset) {
         vertexColors: true
     });
 
-    // Create color array for vertices
-    const colors = new Float32Array(planeGeometry.attributes.position.count * 3);
-
-    // Add simplex noise to the plane vertices
     const vertices = planeGeometry.attributes.position.array;
+    const colors = new Float32Array(vertices.length);
+
     for (let i = 0; i < vertices.length; i += 3) {
         const x = vertices[i];
         const y = vertices[i + 1];
-        // Use multiple layers of noise for more jagged terrain
-        const noise1 = noise2D((x + noiseOffset.x) * DISTANCE_SCALE, (y + noiseOffset.z) * DISTANCE_SCALE) * HEIGHT_SCALE;
-        const noise2 = noise2D((x + noiseOffset.x) * NOISE_SCALE, (y + noiseOffset.z) * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
-        const noise3 = noise2D((x + noiseOffset.x) * NOISE_SCALE * 2, (y + noiseOffset.z) * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
-        const noise4 = noise2D((x + noiseOffset.x) * NOISE_SCALE * 4, (y + noiseOffset.z) * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
-        let height = noise1 + noise2 + noise3 + noise4;
-        
-        // Clamp height to water level if below it
-        const isWater = height < TERRAIN_CONFIG.WATER_LEVEL;
-        if (isWater) {
-            height = TERRAIN_CONFIG.WATER_LEVEL;
-        }
-        
-        // Set vertex height
+
+        const height = calculateTerrainHeight(x, y, noiseOffset);
         vertices[i + 2] = height;
-        
-        // Set vertex color based on height
-        let color;
-        if (isWater) {
-            // Water - use water color regardless of height when it's water
-            color = TERRAIN_CONFIG.COLORS.WATER;
-        } else if (height < TERRAIN_CONFIG.GRASS_HEIGHT) {
-            // Grass
-            color = TERRAIN_CONFIG.COLORS.GRASS;
-        } else if (height > TERRAIN_CONFIG.SNOW_START) {
-            // Snow
-            color = TERRAIN_CONFIG.COLORS.SNOW;
-        } else {
-            // Rock
-            color = TERRAIN_CONFIG.COLORS.ROCK;
-        }
-        
-        colors[i] = color.r;
-        colors[i + 1] = color.g;
-        colors[i + 2] = color.b;
+
+        const color = getTerrainColor(height);
+        setColorInArray(colors, i, color);
     }
     
-    // Add colors to geometry
     planeGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     planeGeometry.attributes.position.needsUpdate = true;
     planeGeometry.computeVertexNormals();
 
-    // Create and position the plane
     const plane = new THREE.Mesh(planeGeometry, planeMaterial);
     plane.rotation.x = -Math.PI / 2;
-    plane.position.y = -5;
     scene.add(plane);
-
     return plane;
 }
 
-function updateTerrain(plane, noiseOffset, terrainPlane) {
-    if (!terrainPlane || !terrainPlane.geometry) {
-        console.log('Terrain plane or geometry is missing:', terrainPlane);
+// Update terrain based on airplane position
+export function updateTerrain(airplane, noiseOffset, plane) {
+    if (!plane || !plane.geometry) {
+        console.log('Terrain plane or geometry is missing:', plane);
         return;
     }
 
-    // Calculate speed based on forward movement
     const baseSpeed = 0.25;
-    const currentSpeed = baseSpeed * (1/4); // Normalize to 60fps
-
+    const currentSpeed = baseSpeed * (1/4) * speedMultiplier; // Use imported speed multiplier
     
     const forwardVector = new THREE.Vector3(0, 0, 1);
-    forwardVector.applyQuaternion(plane.quaternion); //quaternions used to store rotations without gimbal lock, based on plane's rot in model.js
+    forwardVector.applyQuaternion(airplane.quaternion);//quaternions used to store rotations without gimbal lock, based on plane's rot in airplane.js
     forwardVector.normalize();
 
-    // Update noise offset based on plane's direction
     noiseOffset.x += forwardVector.x * currentSpeed;
-    noiseOffset.z -= forwardVector.z * currentSpeed;  // Negative to make terrain move towards plane
+    noiseOffset.z -= forwardVector.z * currentSpeed;
     noiseOffset.y = (noiseOffset.y || 0) - forwardVector.y * currentSpeed;
     
-    // Update terrain vertices with noise
-    const vertices = terrainPlane.geometry.attributes.position.array;
-    const colors = terrainPlane.geometry.attributes.color.array;
-    
+    const vertices = plane.geometry.attributes.position.array;
+    const colors = plane.geometry.attributes.color.array;
+
     for (let i = 0; i < vertices.length; i += 3) {
         const x = vertices[i];
         const y = vertices[i + 1];
-        
-        // Calculate world position
-        const worldX = x + noiseOffset.x;
-        const worldZ = y + noiseOffset.z;
-        const worldY = (noiseOffset.y || 0); // Add vertical offset
-        
-        // Generate terrain height using multiple octaves of noise
-        const noise1 = noise2D(worldX * DISTANCE_SCALE, worldZ * DISTANCE_SCALE) * HEIGHT_SCALE;
-        const noise2 = noise2D(worldX * NOISE_SCALE, worldZ * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
-        const noise3 = noise2D(worldX * NOISE_SCALE * 2, worldZ * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
-        const noise4 = noise2D(worldX * NOISE_SCALE * 4, worldZ * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
-        
-        // Calculate base height (without vertical offset) for coloring
-        let baseHeight = noise1 + noise2 + noise3 + noise4;
-        
-        // Clamp base height to water level if below it
-        const isWater = baseHeight < TERRAIN_CONFIG.WATER_LEVEL;
-        if (isWater) {
-            baseHeight = TERRAIN_CONFIG.WATER_LEVEL;
-        }
-        
-        // Add vertical offset for position
-        let height = baseHeight + worldY;
-        
-        // Set vertex height
+
+        const baseHeight = calculateTerrainHeight(x, y, noiseOffset);
+        const height = baseHeight + (noiseOffset.y || 0);
         vertices[i + 2] = height;
-        
-        // Set vertex color based on base height (without vertical offset)
-        let color;
-        if (isWater) {
-            // Water
-            color = TERRAIN_CONFIG.COLORS.WATER;
-        } else if (baseHeight < TERRAIN_CONFIG.GRASS_HEIGHT) {
-            // Grass
-            color = TERRAIN_CONFIG.COLORS.GRASS;
-        } else if (baseHeight > TERRAIN_CONFIG.SNOW_START) {
-            // Snow
-            color = TERRAIN_CONFIG.COLORS.SNOW;
-        } else {
-            // Rock
-            color = TERRAIN_CONFIG.COLORS.ROCK;
-        }
-        
-        // Force color update
-        colors[i] = color.r;
-        colors[i + 1] = color.g;
-        colors[i + 2] = color.b;
+
+        const color = getTerrainColor(baseHeight);  // Use baseHeight for color determination
+        setColorInArray(colors, i, color);
     }
-    
-    terrainPlane.geometry.attributes.position.needsUpdate = true;
-    terrainPlane.geometry.attributes.color.needsUpdate = true;
-    terrainPlane.geometry.computeVertexNormals();
+
+    plane.geometry.attributes.position.needsUpdate = true;
+    plane.geometry.attributes.color.needsUpdate = true;
+    plane.geometry.computeVertexNormals();
 }
 
 // Add these functions to control the plane's movement
@@ -207,12 +168,9 @@ export function turnPlane(plane, direction) {
 
 export function pitchPlane(plane, direction) {
     plane.rotation.x += direction * FLIGHT_CONFIG.PITCH_SPEED;
-    // Clamp pitch to prevent flipping
     plane.rotation.x = THREE.MathUtils.clamp(
         plane.rotation.x,
         -Math.PI / 2,
         Math.PI / 2
     );
-}
-
-export { updateTerrain }; 
+} 

@@ -6,9 +6,347 @@
     <style>
       body { margin: 0; }
       canvas { display: block; width: 100vw; height: 100vh; }
+
+      #hamburger {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        width: 30px;
+        height: 24px;
+        cursor: pointer;
+        z-index: 1000;
+        transition: transform 0.3s ease;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+
+      #hamburger span {
+        display: block;
+        position: absolute;
+        height: 3px;
+        width: 100%;
+        background: white;
+        border-radius: 3px;
+        opacity: 1;
+        left: 0;
+        transform: rotate(0deg);
+        transition: .25s ease-in-out;
+      }
+
+      #hamburger span:nth-child(1) {
+        top: 10px;
+      }
+
+      #hamburger span:nth-child(2) {
+        top: 20px;
+      }
+
+      #hamburger span:nth-child(3) {
+        top: 30px;
+      }
+
+      #hamburger.active span:nth-child(1) {
+        top: 20px;
+        transform: rotate(135deg);
+      }
+
+      #hamburger.active span:nth-child(2) {
+        opacity: 0;
+        left: -60px;
+      }
+
+      #hamburger.active span:nth-child(3) {
+        top: 20px;
+        transform: rotate(-135deg);
+      }
+
+      #hamburger:hover span {
+        background: #EFC576;
+      }
+
+      #escapeMenu {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.7);
+        padding: 20px;
+        border-radius: 15px;
+        display: none;
+        z-index: 999;
+        min-width: 250px;
+      }
+
+      #escapeMenu.visible {
+        display: block;
+      }
+
+      .menu-item {
+        color: white;
+        padding: 15px;
+        margin: 10px 0;
+        cursor: pointer;
+        text-align: center;
+        font-size: 20px;
+        transition: all 0.3s ease;
+        border-radius: 10px;
+      }
+
+      .menu-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1.1);
+        color: #EFC576;
+      }
+
+      .dropdown {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+      }
+
+      .dropdown-content {
+        display: none;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .dropdown-content.visible {
+        display: block;
+      }
+
+      .dropdown-content h3 {
+        color: #EFC576;
+        padding: 8px 12px;
+        margin: 0;
+        font-size: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .dropdown-content p {
+        color: white;
+        padding: 8px 12px;
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .dropdown-content a {
+        color: white;
+        padding: 8px 12px;
+        text-decoration: none;
+        display: block;
+        font-size: 16px;
+        transition: all 0.3s ease;
+      }
+
+      .dropdown-content a:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #EFC576;
+      }
+
+      .menu-item.active {
+        background: rgba(255, 255, 255, 0.1);
+        color: #EFC576;
+      }
+
+      .controls-info {
+        color: white;
+        padding: 20px;
+        margin: 15px 0;
+        text-align: center;
+        font-size: 24px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .controls-info p {
+        margin: 10px 0;
+        font-size: 18px;
+        color: #EFC576;
+      }
+
+      .dropdown-content .source-item {
+        padding: 8px 12px;
+        color: white;
+        font-size: 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .dropdown-content .source-item:last-child {
+        border-bottom: none;
+      }
+
+      .dropdown-content .source-item a {
+        color: #EFC576;
+        text-decoration: none;
+        padding: 0;
+        display: inline;
+      }
+
+      .dropdown-content .source-item a:hover {
+        text-decoration: underline;
+      }
+
+      .dropdown-content .source-item .attribution {
+        font-size: 12px;
+        color: #aaa;
+        padding: 6px 12px;
+        margin-top: 4px;
+      }
+
+      .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 10px 0;
+        width: 100%;
+      }
+
+      #speedSlider {
+        width: 400px;
+        height: 5px;
+        background: #ddd;
+        border-radius: 5px;
+        outline: none;
+      }
+
+      #speedSlider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 15px;
+        height: 15px;
+        background: #EFC576;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+
+      #speedValue {
+        min-width: 40px;
+        color: #EFC576;
+        font-weight: bold;
+      }
+
+      .menu-button {
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+      }
+
     </style>
   </head>
   <body>
+    <div id="hamburger">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div id="escapeMenu">
+      <div id="toggleFog" class="menu-item">Toggle Fog</div>
+      <div id="toggleAxis" class="menu-item">Toggle Axis</div>
+      <div class="dropdown">
+        <div class="menu-item" id="controlsBtn">Controls</div>
+        <div class="dropdown-content" id="controlsContent">
+          <div class="control-item">
+            <h3>Speed Control</h3>
+            <div class="slider-container">
+              <label for="speedSlider">Speed: <span id="speedValue">2.0</span></label>
+              <input type="range" id="speedSlider" min="0.5" max="8" step="0.5" value="2.0" style="max-width: 400px;">
+            </div>
+          </div>
+          <div class="control-item">
+            <h3>Movement Controls</h3>
+            <p>W - Pitch Up</p>
+            <p>S - Pitch Down</p>
+            <p>A - Roll Left</p>
+            <p>D - Roll Right</p>
+            <p>F - Toggle Flashlight</p>
+          </div>
+          <div class="control-item">
+            <h3>Camera Controls</h3>
+            <p>Left Click - Look Around</p>
+            <p>Scroll - Zoom In/Out</p>
+            <p>Right Click - Pan</p>
+          </div>
+        </div>
+      </div>
+      <div class="dropdown">
+        <div class="menu-item" id="externalSourcesBtn">External Sources</div>
+        <div class="dropdown-content" id="externalSourcesContent">
+          <div class="source-item">
+            <a href="https://threejs.org/manual" target="_blank">[link]</a> Three.js Manual
+            <p class="attribution">Used as a reference for Three.js implementation, camera controls, and scene setup.</p>
+          </div>
+          <div class="source-item">
+            <a href="https://polyhaven.com/a/farm_field_puresky" target="_blank">[link]</a> Skybox Texture
+            <p class="attribution">"Farm Field (Pure Sky)" by Dimitrios Savva and Jarod Guest, licensed under CC0. Used for the scene background.</p>
+          </div>
+          <div class="source-item">
+            <a href="https://poly.pizza/m/8VysVKMXN2J">[link]</a> Airplane Model
+            <p class="attribution">This model is published under a CC-BY license. That means it can be used in any project (personal or commercial) so long as the text below is included. Learn more<br><br>Airplane by Poly by Google [CC-BY] via Poly Pizza</p>
+          </div>   
+          <div class="source-item">
+            <a href="https://skfb.ly/o9ABQ" target="_blank">[link]</a> Compass Model
+            <p class="attribution">"Compass" (https://skfb.ly/o9ABQ) by AyoubBani is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).</p>
+          </div>
+          <div class="source-item">
+            <a href="https://ivydudzik.github.io/CSE160-asgn5/" target="_blank">[link]</a> Pixel Shader Inspiration
+            <p class="attribution">The pixel shader effect was inspired by this demo, which helped in understanding how to implement the pixelated rendering effect.</p>
+          </div>
+          <div class="source-item">
+            [info] ChatGPT – Helped with menu implementation and styling
+          </div>
+          <div class="source-item">
+            [info] ChatGPT – Assisted with the (very very annoying to implement) airplane movement and controls and associated terrain movement
+          </div>
+          <div class="source-item">
+            [info] ChatGPT – Helped with initial cloud - terrain movement/relationship
+          </div>
+        </div>
+      </div>
+      <div class="dropdown">
+        <div class="menu-item" id="notesBtn">Notes to Grader</div>
+        <div class="dropdown-content" id="notesContent">
+          <h3>Lighting System</h3>
+          <p>• Ambient Light: Provides base illumination with gray color (0x404040) at 0.8 intensity</p>
+          <p>• Directional Light: Simulates sunlight with white color at 1.0 intensity</p>
+          <p>• Hemisphere Light: Creates sky/ground color gradient with white sky and dark gray ground</p>
+          <p>• Spotlight: Warm yellow light (0xEFC576) at 3000.0 intensity, with a separate light cone for visual indication/style</p>
+          
+          <div class="note-item">
+            <h3>Three Primary Shapes</h3>
+            <p>• Cube (Smoke Trail): Cube geometry with noise texturing and animation</p>
+            <p>• Cone (Light Cone): Visual indicator for spotlight direction and coverage</p>
+            <p>• Sphere (Clouds): Clustered spheres with custom shader for realistic cloud formation and movement</p>
+          </div>
+          
+          <h3>Animations</h3>
+          <p>• Clouds: Animated following the terrain offset</p>
+          <p>• Smoke Trail: Simple particle system that follows the airplane's movement</p>
+          <p>• Light Cone: Visual indicator that follows the spotlight's direction</p>
+          <div class="note-item">
+            <h3>Extra Features</h3>
+            <p>• Pixel Shader: Post-processing effect that gives the scene a pixelated, retro look</p>
+            <p>• Dynamic Terrain System: Terrain moves around the plane instead of the plane moving over static terrain, creating an infinite world effect</p>
+            <p>• Interactive Menu: Menu with dropdowns for controls, notes, and external sources</p>
+            <p>• Speed Control: Adjustable speed slider to control terrain and cloud movement</p>
+            <p>• "Flashlight" System: Toggleable spotlight</p>
+            <p>• Fog: Fog effect that adds some depth to the scene</p>
+          </div>
+          <div class="note-item">
+            <h3>Getting Started</h3>
+            <p>If you spawn inside the terrain, fly out to see the world generate around you! There's no collision :D</p>
+            <p>If you press a pitch and roll key, at the same time, the plane's neutral local axes might not be preserved, so it's best to press one at a time</p>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="importmap">
         {
             "imports": {

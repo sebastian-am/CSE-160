@@ -2,42 +2,39 @@ import * as THREE from 'three';
 
 // Cloud management
 export const CLOUD_CONFIG = {
-    SPAWN_DISTANCE: 200,   // Distance from center to spawn new clouds
-    DESPAWN_DISTANCE: 250, // Distance from center to despawn clouds
-    MAX_CLOUDS: 40,       // Maximum number of clouds in the scene
+    SPAWN_DISTANCE: 200,                // Distance from center to spawn new clouds
+    DESPAWN_DISTANCE: 250,              // Distance from center to despawn clouds
+    MAX_CLOUDS: 40,                     // Maximum number of clouds in the scene
     SPAWN_HEIGHT: { min: 15, max: 25 }, // Height range for cloud spawning
-    SPAWN_RADIUS: 150,    // Radius around the center where clouds can spawn
-    MOVE_SPEED: 1.0 * (1/2),  // Match terrain speed normalization
-    FADE_DISTANCE: 50     // Distance over which clouds fade in/out
+    SPAWN_RADIUS: 150,                  // Radius around the center where clouds can spawn
+    MOVE_SPEED: 1.0 * (1/2),            // Match terrain speed normalization
+    FADE_DISTANCE: 50                   // Distance over which clouds fade in/out
 };
 
-let clouds = [];  // Array to track active clouds
-let lastNoiseOffset = { x: 0, z: 0, y: 0 };  // Track last offset for smooth movement
+/** @type {Array} */ let clouds = [];  // Array to track active clouds
+/** @type {Object} */ let lastNoiseOffset = { x: 0, z: 0, y: 0 };  // Track last offset
 
 export function createCloud(x, y, z) {
     const cloud = new THREE.Group();
     const material = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.0,  // Start fully transparent
+        opacity: 0.0,  // Should fully transparentt
         roughness: 0.9,
         metalness: 0.0,
         depthWrite: false
     });
 
-    // Create base cloud shape with 3-5 spheres
-    const numSpheres = Math.floor(Math.random() * 3) + 3;
+    const numSpheres = Math.floor(Math.random() * 3) + 3; // 3-5 Spheres per cloud
     const baseRadius = 2.5;
     
-    // Create several overlapping spheres for a cloud
     for (let i = 0; i < numSpheres; i++) {
         const sphereGeometry = new THREE.SphereGeometry(baseRadius, 16, 16);
-        const sphere = new THREE.Mesh(sphereGeometry, material.clone());  // Clone material for individual control
+        const sphere = new THREE.Mesh(sphereGeometry, material.clone());  // For individual control
         
-        // Position spheres in a more natural cluster
         const angle = (i / numSpheres) * Math.PI * 2;
         const radius = baseRadius * 0.5;
-        sphere.position.set(
+        sphere.position.set( // Position spheres in a more natural cluster
             Math.cos(angle) * radius + (Math.random() - 0.5) * 1.5,
             (Math.random() - 0.5) * 1.0,
             Math.sin(angle) * radius + (Math.random() - 0.5) * 1.5
@@ -46,8 +43,7 @@ export function createCloud(x, y, z) {
         cloud.add(sphere);
     }
 
-    // Add some smaller detail spheres
-    const numDetails = Math.floor(Math.random() * 3) + 2;
+    const numDetails = Math.floor(Math.random() * 3) + 2; // Smaller spheres
     for (let i = 0; i < numDetails; i++) {
         const detailGeometry = new THREE.SphereGeometry(baseRadius * 0.6, 16, 16);
         const detail = new THREE.Mesh(detailGeometry, material.clone());  // Clone material for individual control
@@ -67,11 +63,9 @@ export function createCloud(x, y, z) {
 }
 
 export function updateClouds(scene, noiseOffset) {
-    // Get airplane's direction
     const airplane = scene.getObjectByName('airplane');
     if (!airplane) return;
 
-    // Calculate the change in offset
     const deltaX = noiseOffset.x - lastNoiseOffset.x;
     const deltaZ = noiseOffset.z - lastNoiseOffset.z;
     const deltaY = (noiseOffset.y || 0) - (lastNoiseOffset.y || 0);  // Track y offset changes
@@ -96,7 +90,6 @@ export function updateClouds(scene, noiseOffset) {
 
         // Handle fading
         const fadeStart = CLOUD_CONFIG.SPAWN_DISTANCE - CLOUD_CONFIG.FADE_DISTANCE;
-        const fadeEnd = CLOUD_CONFIG.SPAWN_DISTANCE;
         const fadeProgress = Math.min(1, Math.max(0, (distance - fadeStart) / CLOUD_CONFIG.FADE_DISTANCE));
         
         // Update fade progress
@@ -118,14 +111,11 @@ export function updateClouds(scene, noiseOffset) {
 
     // Filter out removed clouds
     clouds = clouds.filter(cloud => cloud.parent === scene);
-
-    // Spawn new clouds if needed
-    while (clouds.length < CLOUD_CONFIG.MAX_CLOUDS) {
-        // Get airplane's yaw angle
+    while (clouds.length < CLOUD_CONFIG.MAX_CLOUDS) { // Spawn new if needed
         const yaw = airplane.rotation.y;
         
-        // Calculate spawn position ahead of the airplane
-        const spawnAngle = yaw + (Math.random() - 0.5) * Math.PI * 0.5; // Reduced angle range
+        // get spawn position ahead of the airplane
+        const spawnAngle = yaw + (Math.random() - 0.5) * Math.PI * 0.5;
         const radius = CLOUD_CONFIG.SPAWN_DISTANCE;
         const x = Math.sin(spawnAngle) * radius + (Math.random() - 0.5) * 30;
         const z = Math.cos(spawnAngle) * radius + (Math.random() - 0.5) * 30;
@@ -139,7 +129,6 @@ export function updateClouds(scene, noiseOffset) {
 }
 
 export function initializeClouds(scene) {
-    // Initialize clouds
     for (let i = 0; i < CLOUD_CONFIG.MAX_CLOUDS; i++) {
         const angle = Math.random() * Math.PI * 2;
         const radius = Math.random() * CLOUD_CONFIG.SPAWN_RADIUS;
