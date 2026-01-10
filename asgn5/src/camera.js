@@ -10,21 +10,67 @@ const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
 camera.position.set(0, 5, -10);  // Position sligthly behind and above the plane
 camera.lookAt(0, 0, 0);
 
-// Controls for camera
-const controls = new OrbitControls(camera, document.body);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.screenSpacePanning = false;
-controls.minDistance = 5;
-controls.maxDistance = 50;
+// Controls for camera - will be attached to canvas in main()
+let controls = null;
+
+// Function to initialize controls with canvas
+export function initControls(canvas) {
+    controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 5;
+    controls.maxDistance = 50;
+    return controls;
+}
+
+// Add camera lock state
+let isCameraLocked = false;
+
+// Function to toggle camera lock
+export function toggleCameraLock() {
+    isCameraLocked = !isCameraLocked;
+    return isCameraLocked;
+}
+
+// Function to get camera lock state
+export function getCameraLockState() {
+    return isCameraLocked;
+}
+
+// Update camera position based on lock state
+export function updateCameraPosition(airplane) {
+    if (!airplane || !controls) return;
+
+    if (isCameraLocked) {
+        const airplanePos = new THREE.Vector3();
+        airplane.getWorldPosition(airplanePos); // get pos and rot
+        
+        const cameraOffset = new THREE.Vector3(0, 2, -8);
+        cameraOffset.applyQuaternion(airplane.quaternion); // get offset
+        
+        camera.position.copy(airplanePos).add(cameraOffset); // set pos and look at airplane
+        camera.lookAt(airplanePos);
+        
+        controls.enabled = false;
+    } else {
+        controls.enabled = true;
+    }
+}
 
 // Function to update controls
 function updateControls() {
-    controls.update();
+    if (controls) {
+        controls.update();
+    }
+}
+
+// Export controls getter (will be set after init)
+export function getControls() {
+    return controls;
 }
 
 export { 
     camera, 
-    controls, 
     updateControls
 }; 

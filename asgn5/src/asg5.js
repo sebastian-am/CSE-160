@@ -5,20 +5,23 @@
 // Imports
 //===============================================
 import * as THREE from 'three';
-import { camera, controls } from './camera.js';
+import { camera, initControls, getControls, toggleCameraLock, updateCameraPosition } from './camera.js';
 import { createSkybox } from './skybox.js';
 import { 
     loadAirplane, 
     handleRollAndYaw, 
     handlePitch, 
     handleFlashlight, 
+    applyRotations,
     maxRoll, 
     maxPitch, 
     moveSpeed,
     getCurrentRoll,
     setCurrentRoll,
     getCurrentPitch,
-    setCurrentPitch
+    setCurrentPitch,
+    getCurrentYaw,
+    setCurrentYaw
 } from './airplane.js';
 import { updateTerrain, createTerrainPlane } from './terrain.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -27,6 +30,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { initializeClouds, updateClouds } from './clouds.js';
 import { updateTrail, clearTrail } from './planeTrail.js';
+import { loadCompass, updateCompass } from './compass.js';
 
 //===============================================
 // Global Variables
@@ -35,9 +39,10 @@ import { updateTrail, clearTrail } from './planeTrail.js';
 /** @type {THREE.WebGLRenderer} */ let renderer;
 /** @type {THREE.EffectComposer} */ let composer;
 /** @type {THREE.RenderPixelatedPass} */ let pixelPass;
-/** @type {number} */ let g_pixelSize = 7;
+/** @type {number} */ let g_pixelSize = 4;
 /** @type {Object} */ let noiseOffset = { x: 0, z: 0 };
 /** @type {THREE.Mesh} */ let plane;
+/** @type {Object} */ let controls;
 
 // Add speed multiplier to global variables
 /** @type {number} */ let speedMultiplier = 2.0;  // Default to 2x speed
@@ -48,7 +53,12 @@ import { updateTrail, clearTrail } from './planeTrail.js';
     a: false,
     s: false,
     d: false,
-    f: false
+    f: false,
+    space: false,
+    arrowUp: false,
+    arrowDown: false,
+    arrowLeft: false,
+    arrowRight: false
 };
 
 export { speedMultiplier }; // for terrain, clouds, and smoke trial
@@ -99,7 +109,7 @@ export const LIGHT_CONFIG = {
 function main() {
     // Scene setup
     scene = new THREE.Scene();
-
+    
     {
         const lightFogColor = new THREE.Color('white');
         const lightFogDensity = 0.003;
@@ -116,10 +126,18 @@ function main() {
     // Create skybox
     createSkybox(scene);
 
+    // Load the compass
+    loadCompass(scene);
+
     // Renderer setup
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
+
+    // Initialize controls with canvas (not document.body) so menu clicks work
+    console.log('Initializing controls...');
+    controls = initControls(renderer.domElement);
+    console.log('Controls initialized:', controls);
 
     // Post-processing setup
     composer = new EffectComposer(renderer);
@@ -133,12 +151,15 @@ function main() {
 
     // Add output pass
     composer.addPass(new OutputPass());
+    
+    // Set composer size to match renderer
+    composer.setSize(window.innerWidth, window.innerHeight);
 
     // Setup lighting
     setupLighting();
 
-    // Setup menu
-    setupMenu();
+    // Setup menu (after controls are initialized)
+    setupMenu(controls);
 
     // Create terrain plane
     plane = createTerrainPlane(scene, noiseOffset);
@@ -205,7 +226,7 @@ function setupLighting() {
 //===============================================
 // Menu Setup
 //===============================================
-function setupMenu() {
+function setupMenu(controls) {
     const menu = document.getElementById('escapeMenu');
     const hamburger = document.getElementById('hamburger');
     const externalSourcesBtn = document.getElementById('externalSourcesBtn');
@@ -215,14 +236,15 @@ function setupMenu() {
     const controlsBtn = document.getElementById('controlsBtn');
     const controlsContent = document.getElementById('controlsContent');
     let isMenuVisible = false;
-    let isFlashlightOn = true;
     let isAxisVisible = false;
 
     function toggleMenu() {
         isMenuVisible = !isMenuVisible;
         menu.classList.toggle('visible');
         hamburger.classList.toggle('active');
-        controls.enabled = !isMenuVisible;
+        if (controls) {
+            controls.enabled = !isMenuVisible;
+        }
         
         // Close dropdowns when closing menu
         if (!isMenuVisible) {
@@ -248,39 +270,12 @@ function setupMenu() {
     window.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
             toggleMenu();
-        } else if (event.key.toLowerCase() === 'f') {
-            // Toggle flashlight
-            isFlashlightOn = !isFlashlightOn;
-            const airplane = scene.getObjectByName('airplane');
-            if (airplane) {
-                const lightCone = airplane.getObjectByName('lightCone');
-                if (lightCone) {
-                    lightCone.visible = isFlashlightOn;
-                }
-                const spotlight = scene.userData.lights.spotlight;
-                if (spotlight) {
-                    spotlight.visible = isFlashlightOn;
-                }
-                // Clear trail when toggling flashlight
-                clearTrail(scene);
-            }
         }
     });
 
     // Add key state tracking
-    window.addEventListener('keydown', (event) => {
-        const key = event.key.toLowerCase();
-        if (key in keyStates) {
-            keyStates[key] = true;
-        }
-    });
-
-    window.addEventListener('keyup', (event) => {
-        const key = event.key.toLowerCase();
-        if (key in keyStates) {
-            keyStates[key] = false;
-        }
-    });
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     hamburger.addEventListener('mousedown', (event) => {
         event.preventDefault();
@@ -319,12 +314,24 @@ function setupMenu() {
         notesBtn.classList.remove('active');
     });
 
-    // Menu item handlers
-    document.getElementById('toggleFog').addEventListener('click', () => {
+    // Menu item handlers - use mousedown to ensure it fires before controls
+    const toggleFogBtn = document.getElementById('toggleFog');
+    const toggleAxisBtn = document.getElementById('toggleAxis');
+    
+    toggleFogBtn.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         scene.fog = scene.fog ? null : new THREE.FogExp2(0xffffff, 0.003);
     });
+    
+    toggleFogBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
 
-    document.getElementById('toggleAxis').addEventListener('click', () => {
+    toggleAxisBtn.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         isAxisVisible = !isAxisVisible;
         const globalAxes = scene.getObjectByName('axesHelper');
         const localAxes = scene.getObjectByName('localAxes');
@@ -336,8 +343,20 @@ function setupMenu() {
             localAxes.visible = isAxisVisible;
         }
     });
+    
+    toggleAxisBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
 
-    window.addEventListener('click', (event) => { // Close menu when clicking outside
+    // Prevent clicks on menu from propagating to controls
+    menu.addEventListener('mousedown', (event) => {
+        event.stopPropagation();
+    });
+    
+    menu.addEventListener('click', (event) => {
+        event.stopPropagation();
+        // Close menu when clicking on menu background (not on children)
         if (isMenuVisible && event.target === menu) {
             toggleMenu();
         }
@@ -349,33 +368,70 @@ function setupMenu() {
 //===============================================
 function animate() {
     requestAnimationFrame(animate);
-    controls.update();
+    if (controls) {
+        controls.update();
+    }
 
     // Update terrain if airplane is loaded
     const airplane = scene.getObjectByName('airplane');
     if (airplane) {
-        // Handle all movement controls
-        const newRoll = handleRollAndYaw(airplane, keyStates, moveSpeed, maxRoll, getCurrentRoll());
-        setCurrentRoll(newRoll);
-        const newPitch = handlePitch(airplane, keyStates, moveSpeed, maxPitch, getCurrentPitch());
+        // Handle all movement controls (support both WASD and arrow keys)
+        // Combine arrow keys with WASD keys
+        const rollLeft = keyStates.a || keyStates.arrowLeft;
+        const rollRight = keyStates.d || keyStates.arrowRight;
+        const pitchUp = keyStates.w || keyStates.arrowUp;
+        const pitchDown = keyStates.s || keyStates.arrowDown;
+        
+        // Create a combined key state object for the handlers
+        const combinedKeyStates = {
+            w: pitchUp,
+            a: rollLeft,
+            s: pitchDown,
+            d: rollRight,
+            f: keyStates.f,
+            space: keyStates.space
+        };
+        
+        // Handle roll and yaw (returns { roll, yaw } object)
+        const rollYawResult = handleRollAndYaw(airplane, combinedKeyStates, moveSpeed, maxRoll, getCurrentRoll(), getCurrentYaw());
+        setCurrentRoll(rollYawResult.roll);
+        setCurrentYaw(rollYawResult.yaw);
+        
+        // Handle pitch
+        const newPitch = handlePitch(airplane, combinedKeyStates, moveSpeed, maxPitch, getCurrentPitch());
         setCurrentPitch(newPitch);
-        handleFlashlight(airplane, keyStates, scene.userData.lights);
+        
+        // Apply all rotations to the airplane
+        applyRotations(airplane, getCurrentRoll(), getCurrentPitch(), getCurrentYaw());
+        
+        handleFlashlight(airplane, combinedKeyStates, scene.userData.lights);
 
         // Update terrain, clouds, and smoke trail based on plane orientation
         updateTerrain(airplane, noiseOffset, plane);
         updateClouds(scene, noiseOffset);
         updateTrail(scene, airplane, noiseOffset);
 
-        // Only update camera position if we're not in free orbit mode
-        if (!controls.enabled) {
-            const cameraOffset = new THREE.Vector3(0, 2, -8);
-            cameraOffset.applyQuaternion(airplane.quaternion);
-            camera.position.copy(airplane.position).add(cameraOffset);
-            camera.lookAt(airplane.position);
-        }
+        // Update camera position based on lock state
+        updateCameraPosition(airplane);
     }
 
-    composer.render();
+    // Update compass position and rotation
+    updateCompass();
+
+    // Render the scene
+    try {
+        if (composer) {
+            composer.render();
+        } else if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
+    } catch (renderError) {
+        console.error('Render error:', renderError);
+        // Fallback to basic renderer
+        if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
+    }
 }
 
 //===============================================
@@ -401,4 +457,77 @@ window.addEventListener('resize', () => {
     }
 });
 
-main();
+// Update key handlers
+function onKeyDown(event) {
+    const key = event.key.toLowerCase();
+    switch(key) {
+        case 'w': keyStates.w = true; break;
+        case 'a': keyStates.a = true; break;
+        case 's': keyStates.s = true; break;
+        case 'd': keyStates.d = true; break;
+        case 'f': keyStates.f = true; break;
+        case ' ': 
+            if (!keyStates.space) {  // toggle once per press only
+                keyStates.space = true;
+                toggleCameraLock();
+            }
+            break;
+    }
+    
+    // Handle arrow keys (they don't lowercase properly)
+    switch(event.key) {
+        case 'ArrowUp': 
+            event.preventDefault(); // Prevent page scrolling
+            keyStates.arrowUp = true; 
+            break;
+        case 'ArrowDown': 
+            event.preventDefault(); // Prevent page scrolling
+            keyStates.arrowDown = true; 
+            break;
+        case 'ArrowLeft': 
+            event.preventDefault(); // Prevent page scrolling
+            keyStates.arrowLeft = true; 
+            break;
+        case 'ArrowRight': 
+            event.preventDefault(); // Prevent page scrolling
+            keyStates.arrowRight = true; 
+            break;
+    }
+}
+
+function onKeyUp(event) {
+    const key = event.key.toLowerCase();
+    switch(key) {
+        case 'w': keyStates.w = false; break;
+        case 'a': keyStates.a = false; break;
+        case 's': keyStates.s = false; break;
+        case 'd': keyStates.d = false; break;
+        case 'f': keyStates.f = false; break;
+        case ' ': keyStates.space = false; break;
+    }
+    
+    // Handle arrow keys (they don't lowercase properly)
+    switch(event.key) {
+        case 'ArrowUp': keyStates.arrowUp = false; break;
+        case 'ArrowDown': keyStates.arrowDown = false; break;
+        case 'ArrowLeft': keyStates.arrowLeft = false; break;
+        case 'ArrowRight': keyStates.arrowRight = false; break;
+    }
+}
+
+// Start the application with error handling
+try {
+    console.log('Starting application...');
+    main();
+    console.log('Application started successfully');
+} catch (error) {
+    console.error('Error initializing application:', error);
+    console.error('Error stack:', error.stack);
+    // Fallback: try to render a basic scene
+    if (renderer && scene && camera) {
+        console.log('Attempting fallback render...');
+        renderer.render(scene, camera);
+    } else {
+        console.error('Renderer, scene, or camera not available for fallback');
+    }
+}

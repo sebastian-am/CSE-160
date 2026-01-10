@@ -75,6 +75,11 @@
         display: none;
         z-index: 999;
         min-width: 250px;
+        pointer-events: auto;
+      }
+      
+      #escapeMenu.visible {
+        pointer-events: auto;
       }
 
       #escapeMenu.visible {
@@ -90,6 +95,8 @@
         font-size: 20px;
         transition: all 0.3s ease;
         border-radius: 10px;
+        pointer-events: auto;
+        user-select: none;
       }
 
       .menu-item:hover {
@@ -273,6 +280,7 @@
             <p>Left Click - Look Around</p>
             <p>Scroll - Zoom In/Out</p>
             <p>Right Click - Pan</p>
+            <p>Space - Toggle Camera Lock</p>
           </div>
         </div>
       </div>

@@ -16,12 +16,15 @@
 // State variables that need to be modified
 let _currentRoll = 0;
 let _currentPitch = 0;
+let _currentYaw = 0;
 
 // Getters and setters for the state variables
 export function getCurrentRoll() { return _currentRoll; }
 export function setCurrentRoll(value) { _currentRoll = value; }
 export function getCurrentPitch() { return _currentPitch; }
 export function setCurrentPitch(value) { _currentPitch = value; }
+export function getCurrentYaw() { return _currentYaw; }
+export function setCurrentYaw(value) { _currentYaw = value; }
 
 //===============================================
 // Imports
@@ -93,65 +96,63 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
 }
 
 // Movement control functions
-function handleRollAndYaw(root, keys, moveSpeed, maxRoll, currentRoll) {
-    // for roll left and right, get current roll, calculate target roll, lerp between them to get new roll, apply rotation
-    // yaw left and right is done by rotating on the world axis (0,1,0)
+function handleRollAndYaw(root, keys, moveSpeed, maxRoll, currentRoll, currentYaw) {
+    // Calculate target roll based on input
+    let targetRoll = 0;
+    let yawDelta = 0;
+    
     if (keys.a) {
-        // Roll left
-        const rollAxis = new THREE.Vector3(0, 0, 1);
-        const targetRoll = -maxRoll;
-        const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 2.0);
-        const rollDelta = newRoll - currentRoll;
-        currentRoll = newRoll;
-        root.rotateOnAxis(rollAxis, rollDelta);
-        
-        // Yaw left
-        root.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), moveSpeed);
+        // Roll left and turn left
+        targetRoll = -maxRoll;
+        yawDelta = moveSpeed;
     } else if (keys.d) {
-        // Roll right
-        const rollAxis = new THREE.Vector3(0, 0, 1);
-        const targetRoll = maxRoll;
-        const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 2.0);
-        const rollDelta = newRoll - currentRoll;
-        currentRoll = newRoll;
-        root.rotateOnAxis(rollAxis, rollDelta);
-        
-        // Yaw right
-        root.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), -moveSpeed);
-    } else { // return to level flight
-        const rollAxis = new THREE.Vector3(0, 0, 1);
-        const newRoll = THREE.MathUtils.lerp(currentRoll, 0, moveSpeed * 3.0);
-        const rollDelta = newRoll - currentRoll;
-        currentRoll = newRoll;
-        root.rotateOnAxis(rollAxis, rollDelta);
+        // Roll right and turn right
+        targetRoll = maxRoll;
+        yawDelta = -moveSpeed;
     }
-    return currentRoll;
+    // If neither key is pressed, targetRoll stays 0 (return to level)
+    
+    // Smoothly interpolate roll back to level when no key is pressed
+    const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 3.0);
+    currentRoll = newRoll;
+    
+    // Update yaw (accumulate the yaw delta)
+    currentYaw += yawDelta;
+    
+    return { roll: currentRoll, yaw: currentYaw };
 }
 
-function handlePitch(root, keys, moveSpeed, maxPitch, currentPitch) { // note to self: never use euler angles again T-T
-    // for pitch up and down, get current pitch, calculate target pitch, lerp between them to get new pitch, apply rotation
+function handlePitch(root, keys, moveSpeed, maxPitch, currentPitch) {
+    // Calculate target pitch based on input
+    let targetPitch = 0;
+    
     if (keys.w) {
-        const pitchAxis = new THREE.Vector3(1, 0, 0);
-        const targetPitch = -maxPitch;  // Negative for up
-        const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 2.0);
-        const pitchDelta = newPitch - currentPitch;
-        currentPitch = newPitch;
-        root.rotateOnAxis(pitchAxis, pitchDelta);
+        // Pitch up
+        targetPitch = -maxPitch;
     } else if (keys.s) {
-        const pitchAxis = new THREE.Vector3(1, 0, 0);
-        const targetPitch = maxPitch;   // Positive for down
-        const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 2.0);
-        const pitchDelta = newPitch - currentPitch;
-        currentPitch = newPitch;
-        root.rotateOnAxis(pitchAxis, pitchDelta);
-    } else { // return to level flight
-        const pitchAxis = new THREE.Vector3(1, 0, 0);
-        const newPitch = THREE.MathUtils.lerp(currentPitch, 0, moveSpeed * 3.0);
-        const pitchDelta = newPitch - currentPitch;
-        currentPitch = newPitch;
-        root.rotateOnAxis(pitchAxis, pitchDelta);
+        // Pitch down
+        targetPitch = maxPitch;
     }
-    return currentPitch;
+    // If neither key is pressed, targetPitch stays 0 (return to level)
+    
+    // Smoothly interpolate pitch back to level when no key is pressed
+    const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 3.0);
+    
+    return newPitch;
+}
+
+// New function to apply rotations in correct order
+function applyRotations(root, currentRoll, currentPitch, currentYaw) {
+    // Set rotation order first (important for correct interpretation)
+    root.rotation.order = 'YXZ';
+    
+    // Apply rotations in YXZ order (yaw-pitch-roll)
+    // This ensures that:
+    // 1. Yaw (Y-axis) is applied first (turning left/right)
+    // 2. Pitch (X-axis) is applied second (pitching up/down)  
+    // 3. Roll (Z-axis) is applied last (rolling left/right)
+    // The set() method takes (x, y, z) which correspond to rotations around X, Y, Z axes
+    root.rotation.set(currentPitch, currentYaw, currentRoll);
 }
 
 function handleFlashlight(root, keys, lights) {
@@ -160,11 +161,11 @@ function handleFlashlight(root, keys, lights) {
             keys.fPressed = true;
             if (lights && lights.spotlight) {
                 lights.spotlight.visible = !lights.spotlight.visible;
-            }
-            // Find the light cone in the scene
-            const lightCone = root.getObjectByName('lightCone', true);  // true means search recursively
-            if (lightCone) {
-                lightCone.visible = !lightCone.visible;
+                // Find the light cone in the scene
+                const lightCone = root.getObjectByName('lightCone', true);  // true means search recursively
+                if (lightCone) {
+                    lightCone.visible = !lightCone.visible;
+                }
             }
         }
     } else {
@@ -172,4 +173,4 @@ function handleFlashlight(root, keys, lights) {
     }
 }
 
-export { loadAirplane, handleRollAndYaw, handlePitch, handleFlashlight }; 
+export { loadAirplane, handleRollAndYaw, handlePitch, handleFlashlight, applyRotations }; 
