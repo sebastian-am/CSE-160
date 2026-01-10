@@ -10,7 +10,7 @@
 // Control parameters
 /** @type {number} */ export const maxRoll = Math.PI / 4;
 /** @type {number} */ export const maxPitch = Math.PI / 4;
-/** @type {number} */ export const moveSpeed = 0.015;
+/** @type {number} */ export const moveSpeed = 0.03;  // Doubled from 0.015
 /** @type {number} */ export const returnSpeed = 0.97;
 
 // State variables that need to be modified

@@ -5,7 +5,7 @@
 // Imports
 //===============================================
 import * as THREE from 'three';
-import { camera, initControls, getControls, toggleCameraLock, updateCameraPosition } from './camera.js';
+import { camera, initControls, toggleCameraLock, updateCameraPosition } from './camera.js';
 import { createSkybox } from './skybox.js';
 import { 
     loadAirplane, 
@@ -135,9 +135,7 @@ function main() {
     document.body.appendChild(renderer.domElement);
 
     // Initialize controls with canvas (not document.body) so menu clicks work
-    console.log('Initializing controls...');
     controls = initControls(renderer.domElement);
-    console.log('Controls initialized:', controls);
 
     // Post-processing setup
     composer = new EffectComposer(renderer);
@@ -375,19 +373,12 @@ function animate() {
     // Update terrain if airplane is loaded
     const airplane = scene.getObjectByName('airplane');
     if (airplane) {
-        // Handle all movement controls (support both WASD and arrow keys)
-        // Combine arrow keys with WASD keys
-        const rollLeft = keyStates.a || keyStates.arrowLeft;
-        const rollRight = keyStates.d || keyStates.arrowRight;
-        const pitchUp = keyStates.w || keyStates.arrowUp;
-        const pitchDown = keyStates.s || keyStates.arrowDown;
-        
-        // Create a combined key state object for the handlers
+        // Combine WASD and arrow keys for unified control
         const combinedKeyStates = {
-            w: pitchUp,
-            a: rollLeft,
-            s: pitchDown,
-            d: rollRight,
+            w: keyStates.w || keyStates.arrowUp,
+            a: keyStates.a || keyStates.arrowLeft,
+            s: keyStates.s || keyStates.arrowDown,
+            d: keyStates.d || keyStates.arrowRight,
             f: keyStates.f,
             space: keyStates.space
         };
@@ -517,17 +508,11 @@ function onKeyUp(event) {
 
 // Start the application with error handling
 try {
-    console.log('Starting application...');
     main();
-    console.log('Application started successfully');
 } catch (error) {
     console.error('Error initializing application:', error);
-    console.error('Error stack:', error.stack);
     // Fallback: try to render a basic scene
     if (renderer && scene && camera) {
-        console.log('Attempting fallback render...');
         renderer.render(scene, camera);
-    } else {
-        console.error('Renderer, scene, or camera not available for fallback');
     }
 }

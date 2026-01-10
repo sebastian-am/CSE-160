@@ -33,11 +33,6 @@ export function toggleCameraLock() {
     return isCameraLocked;
 }
 
-// Function to get camera lock state
-export function getCameraLockState() {
-    return isCameraLocked;
-}
-
 // Update camera position based on lock state
 export function updateCameraPosition(airplane) {
     if (!airplane || !controls) return;

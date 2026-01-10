@@ -3,17 +3,6 @@ import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
 import { speedMultiplier } from './asg5.js';
 
 
-// Flight physics configuration
-const FLIGHT_CONFIG = {
-    MIN_SPEED: 0.1,        // Minimum flight speed
-    MAX_SPEED: 0.5,        // Maximum flight speed
-    TURN_SPEED: 0.02,      // Turn rate
-    PITCH_SPEED: 0.02,     // Climb/dive rate
-    ACCELERATION: 0.01,    // Speed change rate
-    CURRENT_SPEED: 0.2,    // Initial speed
-    TARGET_SPEED: 0.2      // Target speed for smooth acceleration
-};
-
 // Terrain configuration
 const HEIGHT_SCALE = 50;  // Height amplitude
 const NOISE_SCALE = 0.01;  // Base frequency
@@ -112,11 +101,10 @@ export function createTerrainPlane(scene, noiseOffset) {
 // Update terrain based on airplane position
 export function updateTerrain(airplane, noiseOffset, plane) {
     if (!plane || !plane.geometry) {
-        console.log('Terrain plane or geometry is missing:', plane);
         return;
     }
 
-    const baseSpeed = 0.25;
+    const baseSpeed = 0.5;  // Doubled from 0.25
     const currentSpeed = baseSpeed * (1/4) * speedMultiplier; // Use imported speed multiplier
     
     const forwardVector = new THREE.Vector3(0, 0, 1);
@@ -146,31 +134,3 @@ export function updateTerrain(airplane, noiseOffset, plane) {
     plane.geometry.attributes.color.needsUpdate = true;
     plane.geometry.computeVertexNormals();
 }
-
-// Add these functions to control the plane's movement
-export function increaseSpeed() {
-    FLIGHT_CONFIG.TARGET_SPEED = Math.min(
-        FLIGHT_CONFIG.TARGET_SPEED + 0.1,
-        FLIGHT_CONFIG.MAX_SPEED
-    );
-}
-
-export function decreaseSpeed() {
-    FLIGHT_CONFIG.TARGET_SPEED = Math.max(
-        FLIGHT_CONFIG.TARGET_SPEED - 0.1,
-        FLIGHT_CONFIG.MIN_SPEED
-    );
-}
-
-export function turnPlane(plane, direction) {
-    plane.rotation.y += direction * FLIGHT_CONFIG.TURN_SPEED;
-}
-
-export function pitchPlane(plane, direction) {
-    plane.rotation.x += direction * FLIGHT_CONFIG.PITCH_SPEED;
-    plane.rotation.x = THREE.MathUtils.clamp(
-        plane.rotation.x,
-        -Math.PI / 2,
-        Math.PI / 2
-    );
-} 

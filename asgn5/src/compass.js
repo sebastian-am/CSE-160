@@ -33,36 +33,30 @@ let headingVelocity = 0;
 // Load the compass model
 export function loadCompass(sceneRef) {
     scene = sceneRef;
-    console.log("Starting to load compass...");
     return new Promise((resolve) => {
         const gltfLoader = new GLTFLoader();
         gltfLoader.setPath('../assets/compass/');
 
-        console.log("Loading compass body...");
         compassGroup = new THREE.Group();
         compassGroup.name = 'compass';
 
         gltfLoader.load(
             'body.glb',
             (gltf) => {
-                console.log("Body GLB loaded successfully");
                 compassBase = gltf.scene;
                 compassBase.scale.set(COMPASS_CONFIG.scale, COMPASS_CONFIG.scale, COMPASS_CONFIG.scale);
                 compassBase.rotation.y = Math.PI;
                 compassGroup.add(compassBase);
 
-                console.log("Loading compass needle...");
                 gltfLoader.load(
                     'needle.glb',
                     (gltf) => {
-                        console.log("Needle GLB loaded successfully");
                         compassNeedle = gltf.scene;
                         compassNeedle.scale.set(COMPASS_CONFIG.scale, COMPASS_CONFIG.scale, COMPASS_CONFIG.scale);
                         compassNeedle.rotation.y = Math.PI;
                         compassGroup.add(compassNeedle);
 
                         scene.add(compassGroup);
-                        console.log("Compass added to scene");
                         resolve(compassGroup);
                     },
                     undefined,
@@ -82,13 +76,11 @@ export function loadCompass(sceneRef) {
 // Update compass position and rotation
 export function updateCompass() {
     if (!compassGroup || !scene) {
-        console.log("Compass group or scene not initialized");
         return;
     }
 
     const airplane = scene.getObjectByName('airplane');
     if (!airplane) {
-        console.log("Airplane not found in scene");
         return;
     }
 
