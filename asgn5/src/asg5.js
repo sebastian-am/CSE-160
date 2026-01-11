@@ -47,6 +47,9 @@ import { loadCompass, updateCompass } from './compass.js';
 // Add speed multiplier to global variables
 /** @type {number} */ let speedMultiplier = 2.0;  // Default to 2x speed
 
+// Delta time tracking for smooth animations
+let lastTime = performance.now();
+
 // Key state tracking
 /** @type {Object} */ let keyStates = {
     w: false,
@@ -366,6 +369,12 @@ function setupMenu(controls) {
 //===============================================
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Calculate delta time for smooth animations
+    const currentTime = performance.now();
+    const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Cap at 100ms to prevent large jumps
+    lastTime = currentTime;
+    
     if (controls) {
         controls.update();
     }
@@ -384,12 +393,13 @@ function animate() {
         };
         
         // Handle roll and yaw (returns { roll, yaw } object)
-        const rollYawResult = handleRollAndYaw(airplane, combinedKeyStates, moveSpeed, maxRoll, getCurrentRoll(), getCurrentYaw());
+        const rollYawResult = handleRollAndYaw(airplane, combinedKeyStates, moveSpeed, maxRoll, getCurrentRoll(), getCurrentYaw(), speedMultiplier, deltaTime);
         setCurrentRoll(rollYawResult.roll);
         setCurrentYaw(rollYawResult.yaw);
+        // Note: yaw rate is updated inside handleRollAndYaw
         
         // Handle pitch
-        const newPitch = handlePitch(airplane, combinedKeyStates, moveSpeed, maxPitch, getCurrentPitch());
+        const newPitch = handlePitch(airplane, combinedKeyStates, moveSpeed, maxPitch, getCurrentPitch(), speedMultiplier, deltaTime);
         setCurrentPitch(newPitch);
         
         // Apply all rotations to the airplane

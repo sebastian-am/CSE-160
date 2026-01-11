@@ -17,6 +17,7 @@
 let _currentRoll = 0;
 let _currentPitch = 0;
 let _currentYaw = 0;
+let _currentYawRate = 0; // Current yaw rotation rate (radians per second)
 
 // Getters and setters for the state variables
 export function getCurrentRoll() { return _currentRoll; }
@@ -25,6 +26,8 @@ export function getCurrentPitch() { return _currentPitch; }
 export function setCurrentPitch(value) { _currentPitch = value; }
 export function getCurrentYaw() { return _currentYaw; }
 export function setCurrentYaw(value) { _currentYaw = value; }
+export function getCurrentYawRate() { return _currentYawRate; }
+export function setCurrentYawRate(value) { _currentYawRate = value; }
 
 //===============================================
 // Imports
@@ -96,33 +99,51 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
 }
 
 // Movement control functions
-function handleRollAndYaw(root, keys, moveSpeed, maxRoll, currentRoll, currentYaw) {
+function handleRollAndYaw(root, keys, moveSpeed, maxRoll, currentRoll, currentYaw, speedMultiplier, deltaTime) {
     // Calculate target roll based on input
     let targetRoll = 0;
-    let yawDelta = 0;
+    let targetYawRate = 0; // Target yaw rotation rate (radians per second)
     
     if (keys.a) {
         // Roll left and turn left
         targetRoll = -maxRoll;
-        yawDelta = moveSpeed;
+        targetYawRate = moveSpeed * 60; // Convert to radians per second (assuming 60fps base)
     } else if (keys.d) {
         // Roll right and turn right
         targetRoll = maxRoll;
-        yawDelta = -moveSpeed;
+        targetYawRate = -moveSpeed * 60; // Convert to radians per second
     }
     // If neither key is pressed, targetRoll stays 0 (return to level)
     
-    // Smoothly interpolate roll back to level when no key is pressed
-    const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, moveSpeed * 3.0);
+    // Check if pitch is also active (combining movements)
+    const isCombiningMovements = keys.w || keys.s;
+    
+    // Calculate smoothing factor - much slower for realistic turning
+    // Even slower when combining with pitch for smoother transitions
+    const baseSmoothingRate = isCombiningMovements ? 1.0 : 1.5; // Slower when combining movements
+    // Scale up slightly with speed (slower speeds = slower turning)
+    // At speedMultiplier 1.0: rate = 0.7 (combining) or 1.05 (single)
+    // At speedMultiplier 2.0: rate = 0.8 (combining) or 1.2 (single)
+    // At speedMultiplier 4.0+: rate = 0.9 (combining) or 1.35 (single)
+    const speedAdjustedRate = baseSmoothingRate * (0.7 + speedMultiplier * 0.1);
+    const smoothingFactor = 1.0 - Math.exp(-speedAdjustedRate * deltaTime);
+    
+    // Smoothly interpolate roll using exponential smoothing
+    const newRoll = THREE.MathUtils.lerp(currentRoll, targetRoll, smoothingFactor);
     currentRoll = newRoll;
     
-    // Update yaw (accumulate the yaw delta)
-    currentYaw += yawDelta;
+    // Smoothly interpolate yaw rate to match rotation smoothness
+    // This makes the turning movement match the visual rotation
+    const newYawRate = THREE.MathUtils.lerp(_currentYawRate, targetYawRate, smoothingFactor);
+    _currentYawRate = newYawRate;
+    
+    // Apply the smoothed yaw rate to update yaw
+    currentYaw += newYawRate * deltaTime;
     
     return { roll: currentRoll, yaw: currentYaw };
 }
 
-function handlePitch(root, keys, moveSpeed, maxPitch, currentPitch) {
+function handlePitch(root, keys, moveSpeed, maxPitch, currentPitch, speedMultiplier, deltaTime) {
     // Calculate target pitch based on input
     let targetPitch = 0;
     
@@ -135,8 +156,21 @@ function handlePitch(root, keys, moveSpeed, maxPitch, currentPitch) {
     }
     // If neither key is pressed, targetPitch stays 0 (return to level)
     
-    // Smoothly interpolate pitch back to level when no key is pressed
-    const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, moveSpeed * 3.0);
+    // Check if roll/yaw is also active (combining movements)
+    const isCombiningMovements = keys.a || keys.d;
+    
+    // Calculate smoothing factor - even slower for pitch (up/down feels snappier)
+    // Even slower when combining with roll/yaw for smoother transitions
+    const baseSmoothingRate = isCombiningMovements ? 0.7 : 1.0; // Slower when combining movements
+    // Scale up slightly with speed (slower speeds = slower turning)
+    // At speedMultiplier 1.0: rate = 0.49 (combining) or 0.7 (single)
+    // At speedMultiplier 2.0: rate = 0.56 (combining) or 0.8 (single)
+    // At speedMultiplier 4.0+: rate = 0.63 (combining) or 0.9 (single)
+    const speedAdjustedRate = baseSmoothingRate * (0.7 + speedMultiplier * 0.1);
+    const smoothingFactor = 1.0 - Math.exp(-speedAdjustedRate * deltaTime);
+    
+    // Smoothly interpolate pitch using exponential smoothing
+    const newPitch = THREE.MathUtils.lerp(currentPitch, targetPitch, smoothingFactor);
     
     return newPitch;
 }
