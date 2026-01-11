@@ -37,18 +37,21 @@ export function toggleCameraLock() {
 export function updateCameraPosition(airplane) {
     if (!airplane || !controls) return;
 
+    const airplanePos = new THREE.Vector3();
+    airplane.getWorldPosition(airplanePos);
+
     if (isCameraLocked) {
-        const airplanePos = new THREE.Vector3();
-        airplane.getWorldPosition(airplanePos); // get pos and rot
-        
+        // Camera locked: follow airplane closely
         const cameraOffset = new THREE.Vector3(0, 2, -8);
-        cameraOffset.applyQuaternion(airplane.quaternion); // get offset
+        cameraOffset.applyQuaternion(airplane.quaternion);
         
-        camera.position.copy(airplanePos).add(cameraOffset); // set pos and look at airplane
+        camera.position.copy(airplanePos).add(cameraOffset);
         camera.lookAt(airplanePos);
         
         controls.enabled = false;
     } else {
+        // Camera unlocked: don't update target automatically (prevents zooming out)
+        // User can manually control the camera
         controls.enabled = true;
     }
 }

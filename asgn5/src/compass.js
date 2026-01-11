@@ -117,7 +117,10 @@ export function updateCompass() {
         // Get plane's forward vector
         const planeForward = new THREE.Vector3(0, 0, 1);
         planeForward.applyQuaternion(airplane.quaternion);
-        targetHeading = -Math.atan2(planeForward.x, planeForward.z);
+        // Calculate heading: atan2(x, z) gives angle from +Z axis
+        // North (z=1, x=0) = 0, East (z=0, x=1) = π/2, South (z=-1, x=0) = π, West (z=0, x=-1) = -π/2
+        // Subtract π/2 to correct for needle model orientation (if pointing perpendicular when heading north)
+        targetHeading = Math.atan2(planeForward.x, planeForward.z) - Math.PI / 2;
 
         // Get the shortest angle diff
         let angleDiff = targetHeading - currentHeading;

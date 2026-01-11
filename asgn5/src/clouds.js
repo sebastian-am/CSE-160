@@ -107,11 +107,12 @@ export function updateClouds(scene, noiseOffset) {
     lastNoiseOffset.y = noiseOffset.y || 0;
 
     clouds.forEach(cloud => {
-        // Apply individual speed variation
-        const speedFactor = cloud.userData.speedFactor;
-        cloud.position.x -= deltaX * CLOUD_CONFIG.MOVE_SPEED * speedFactor;
-        cloud.position.z += deltaZ * CLOUD_CONFIG.MOVE_SPEED * speedFactor;
-        cloud.position.y += deltaY * CLOUD_CONFIG.MOVE_SPEED * speedFactor;
+        // Move clouds in sync with terrain chunk group
+        // Chunk group moves at -noiseOffset, so clouds should move at -deltaX, -deltaZ, -deltaY
+        // This keeps clouds in sync with the terrain movement
+        cloud.position.x -= deltaX;  // Move opposite to noiseOffset.x (same as chunk group)
+        cloud.position.z -= deltaZ;  // Move opposite to noiseOffset.z (same as chunk group)
+        cloud.position.y -= deltaY;  // Move opposite to noiseOffset.y (same as chunk group moves down when noiseOffset.y increases)
 
         const distance = Math.sqrt(
             Math.pow(cloud.position.x, 2) +

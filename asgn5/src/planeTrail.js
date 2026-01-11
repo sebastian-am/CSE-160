@@ -10,13 +10,13 @@ import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
 
 // Constants and Configuration
 const TRAIL_CONFIG = {
-    MAX_PARTICLES: 50,            // Maximum number of trail particles
-    SPAWN_INTERVAL: 100,          // Milliseconds between spawns
+    MAX_PARTICLES: 100,            // Maximum number of trail particles (doubled from 50)
+    SPAWN_INTERVAL: 50,            // Milliseconds between spawns (halved from 100 for twice as many)
     LIFETIME: 2000,               // How long each particle lives (ms)
     SIZE: { min: 0.3, max: 0.5 }, // Size range for trail particles
     COLOR: 0xE0E0E0,              // Light grey color
     FADE_START: 0.7,              // When to start fading (percentage of lifetime)
-    SPAWN_DISTANCE: -1,           // Distance behind airplane to spawn particles
+    SPAWN_DISTANCE: -1.2,         // Distance behind airplane to spawn particles (closer to tail)
     SPAWN_OFFSET: { y: -0.5 },    // Vertical offset relative to spawn position
     POSITION_VARIANCE: 0.3,       // How much to vary x,y position
     MOVE_SPEED: 1.0 * (1/2)       // Match terrain speed normalization
@@ -92,14 +92,16 @@ export function updateTrail(scene, airplane, noiseOffset) {
         airplane.getWorldPosition(airplanePos);
         
         // Calculate spawn position behind the airplane with random variation
+        // Use local space: behind is negative Z, then transform to world space
         const spawnOffset = new THREE.Vector3(
             (Math.random() - 0.5) * TRAIL_CONFIG.POSITION_VARIANCE,
             TRAIL_CONFIG.SPAWN_OFFSET.y,
-            TRAIL_CONFIG.SPAWN_DISTANCE
+            TRAIL_CONFIG.SPAWN_DISTANCE  // Negative Z = behind the airplane
         );
+        // Transform to world space using airplane's rotation
         spawnOffset.applyQuaternion(airplane.quaternion);
         
-        // Calculate spawn position
+        // Calculate spawn position (airplane is at origin, so just use the offset)
         const spawnPos = airplanePos.clone().add(spawnOffset);
         
         const particle = createTrailParticle(
@@ -115,10 +117,11 @@ export function updateTrail(scene, airplane, noiseOffset) {
 
     // Update existing particles
     trailParticles.forEach((particle, index) => {
-        // Move particles with terrain
-        particle.position.x -= deltaX * TRAIL_CONFIG.MOVE_SPEED;
-        particle.position.z += deltaZ * TRAIL_CONFIG.MOVE_SPEED;
-        particle.position.y += deltaY * TRAIL_CONFIG.MOVE_SPEED;
+        // Move particles in sync with terrain chunk group (same as clouds)
+        // Chunk group moves at -noiseOffset, so particles should move at -deltaX, -deltaZ, -deltaY
+        particle.position.x -= deltaX;  // Same as clouds
+        particle.position.z -= deltaZ;  // Same as clouds
+        particle.position.y -= deltaY;   // Same as clouds
 
         const age = currentTime - particle.userData.createdAt;
         const lifetimeRatio = age / TRAIL_CONFIG.LIFETIME;
