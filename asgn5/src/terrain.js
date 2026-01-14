@@ -189,17 +189,38 @@ function createTerrainChunk(chunkX, chunkZ) {
             const chunkMinZ = chunkCenterZ - CHUNK_SIZE / 2;
             
             // World position = chunk corner + grid offset
-            // This ensures boundary vertices (at col=0 or col=CHUNK_RESOLUTION) use exact coordinates
-            const worldX = chunkMinX + col * vertexSpacing;
-            const worldZ = chunkMinZ + row * vertexSpacing;
+            // Use exact arithmetic to ensure boundary vertices match perfectly
+            // For boundary vertices (col=0 or col=CHUNK_RESOLUTION), calculate directly from chunk boundaries
+            let worldX, worldZ;
+            if (col === 0) {
+                // Left edge: use exact chunk boundary
+                worldX = chunkMinX;
+            } else if (col === CHUNK_RESOLUTION) {
+                // Right edge: use exact chunk boundary
+                worldX = chunkCenterX + CHUNK_SIZE / 2;
+            } else {
+                // Interior vertices: use calculated position
+                worldX = chunkMinX + col * vertexSpacing;
+            }
+            
+            if (row === 0) {
+                // Top edge: use exact chunk boundary
+                worldZ = chunkMinZ;
+            } else if (row === CHUNK_RESOLUTION) {
+                // Bottom edge: use exact chunk boundary
+                worldZ = chunkCenterZ + CHUNK_SIZE / 2;
+            } else {
+                // Interior vertices: use calculated position
+                worldZ = chunkMinZ + row * vertexSpacing;
+            }
 
             // Use absolute world position for noise (ensures seamless chunks)
             // This ensures that the same world position always gets the same height
             const height = calculateTerrainHeight(worldX, worldZ, { x: 0, z: 0 });
-            vertices[i + 2] = height;
+        vertices[i + 2] = height;
 
-            const color = getTerrainColor(height);
-            setColorInArray(colors, i, color);
+        const color = getTerrainColor(height);
+        setColorInArray(colors, i, color);
             
             vertexIndex++;
         }

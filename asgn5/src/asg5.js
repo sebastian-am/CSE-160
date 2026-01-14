@@ -29,7 +29,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { initializeClouds, updateClouds, resetClouds } from './clouds.js';
-import { updateTrail, clearTrail } from './planeTrail.js';
+import { updateTrail, clearTrail, fadeOutTrail } from './planeTrail.js';
 import { loadCompass, updateCompass } from './compass.js';
 import { createExplosion, updateExplosion, clearExplosion, getHasExploded, resetExplosion } from './explosion.js';
 
@@ -52,15 +52,14 @@ import { createExplosion, updateExplosion, clearExplosion, getHasExploded, reset
 let lastTime = performance.now();
 let frameCount = 0;
 
+// Spawn configuration
+const SAFE_SPAWN_HEIGHT = 31.25; // Desired clearance above terrain (250 / 8)
+
 // Game state
 /** @type {boolean} */ let isExploded = false;
 /** @type {boolean} */ let isHitboxVisible = false; // Global hitbox visibility state
 
 // Collision visualization
-let collisionMarkersGroup = null;
-let showCollisionMarkers = false;
-let terrainCollisionMesh = null;
-let showTerrainCollisionSurface = false;
 
 // Key state tracking
 /** @type {Object} */ let keyStates = {
@@ -186,8 +185,8 @@ function main() {
     // Create terrain plane
     plane = createTerrainPlane(scene, noiseOffset);
 
-    // Load the airplane model
-    loadAirplane(scene, camera, controls, noiseOffset, plane).then((airplane) => {
+    // Helper function to spawn airplane at safe height above terrain
+    function spawnAirplaneAtSafeHeight(airplane, noiseOffset, logMessage = 'Spawned') {
         // CRITICAL: The airplane is always at world position (0, 0, 0) after updateTerrain
         // Vertical position is tracked by noiseOffset.y
         // Terrain chunks are positioned at -noiseOffset, so terrain at absolute height H appears at world (H - noiseOffset.y)
@@ -195,19 +194,23 @@ function main() {
         
         // Calculate terrain height at spawn location (absolute world 0, 0)
         const terrainAtSpawn = calculateTerrainHeight(0, 0, { x: 0, z: 0 });
-        const SAFE_SPAWN_HEIGHT = 31.25; // Desired clearance above terrain (250 / 8)
         const SAFE_NOISE_OFFSET_Y = terrainAtSpawn + SAFE_SPAWN_HEIGHT;
         
         // Set noiseOffset.y to spawn height (this is the airplane's "virtual" Y position)
         noiseOffset.y = SAFE_NOISE_OFFSET_Y;
         
-        // Airplane position will be set to (0, 0, 0) by updateTerrain, but that's fine
-        // The actual vertical position is noiseOffset.y
+        // Reset airplane position to origin (updateTerrain will also do this, but set it explicitly)
+        airplane.position.set(0, 0, 0);
         
-        console.log('Spawned: terrain height =', terrainAtSpawn.toFixed(2), 'noiseOffset.y =', SAFE_NOISE_OFFSET_Y.toFixed(2), 'clearance =', SAFE_SPAWN_HEIGHT);
+        console.log(`${logMessage}: terrain height =`, terrainAtSpawn.toFixed(2), 'noiseOffset.y =', SAFE_NOISE_OFFSET_Y.toFixed(2), 'clearance =', SAFE_SPAWN_HEIGHT);
         
         // Store spawn height for reference
         airplane.userData.spawnHeight = SAFE_SPAWN_HEIGHT;
+    }
+
+    // Load the airplane model
+    loadAirplane(scene, camera, controls, noiseOffset, plane).then((airplane) => {
+        spawnAirplaneAtSafeHeight(airplane, noiseOffset, 'Spawned');
     });
 
     // Initialize clouds
@@ -267,197 +270,6 @@ function setupLighting() {
     };
 }
 
-//===============================================
-// Collision Visualization
-//===============================================
-function visualizeCollisionPoints(hitboxPoints, terrainX, terrainZ) {
-    if (!collisionMarkersGroup) {
-        collisionMarkersGroup = new THREE.Group();
-        collisionMarkersGroup.name = 'collisionMarkers';
-        scene.add(collisionMarkersGroup);
-    }
-    
-    // Clear old markers
-    while (collisionMarkersGroup.children.length > 0) {
-        const child = collisionMarkersGroup.children[0];
-        child.geometry.dispose();
-        child.material.dispose();
-        collisionMarkersGroup.remove(child);
-    }
-    
-    // Create markers for each collision point
-    const airplane = scene.getObjectByName('airplane');
-    if (!airplane) return;
-    
-    hitboxPoints.forEach((point) => {
-        // Get the hitbox that collided
-        const hitbox = point.name === 'body' 
-            ? airplane.getObjectByName('bodyHitbox')
-            : airplane.getObjectByName('wingHitbox');
-        
-        if (!hitbox) return;
-        
-        // Get hitbox center in world space
-        const hitboxWorldPos = new THREE.Vector3();
-        hitbox.getWorldPosition(hitboxWorldPos);
-        
-        // Calculate terrain position at collision point
-        const terrainHeight = parseFloat(point.terrainHeight);
-        
-        // Create a sphere marker at the terrain collision point
-        const markerGeometry = new THREE.SphereGeometry(1, 16, 16);
-        const markerMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff0000, // Red
-            transparent: true,
-            opacity: 0.8
-        });
-        const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-        marker.position.set(hitboxWorldPos.x, terrainHeight, hitboxWorldPos.z);
-        collisionMarkersGroup.add(marker);
-        
-        // Create a line from hitbox bottom to terrain
-        const hitboxBottomY = parseFloat(point.hitboxBottom);
-        const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(hitboxWorldPos.x, hitboxBottomY, hitboxWorldPos.z),
-            new THREE.Vector3(hitboxWorldPos.x, terrainHeight, hitboxWorldPos.z)
-        ]);
-        const lineMaterial = new THREE.LineBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.6
-        });
-        const line = new THREE.Line(lineGeometry, lineMaterial);
-        collisionMarkersGroup.add(line);
-    });
-}
-
-function toggleCollisionMarkers() {
-    showCollisionMarkers = !showCollisionMarkers;
-    
-    if (!collisionMarkersGroup) {
-        collisionMarkersGroup = new THREE.Group();
-        collisionMarkersGroup.name = 'collisionMarkers';
-        scene.add(collisionMarkersGroup);
-    }
-    
-    collisionMarkersGroup.visible = showCollisionMarkers;
-    
-    // Clear markers when toggling off
-    if (!showCollisionMarkers) {
-        while (collisionMarkersGroup.children.length > 0) {
-            const child = collisionMarkersGroup.children[0];
-            child.geometry.dispose();
-            child.material.dispose();
-            collisionMarkersGroup.remove(child);
-        }
-    }
-}
-
-// Create a visualization mesh that shows exactly what collision detection sees
-// This uses the same calculateTerrainHeight() function to ensure 1:1 match
-function updateTerrainCollisionSurface(noiseOffset) {
-    if (!showTerrainCollisionSurface) {
-        if (terrainCollisionMesh) {
-            terrainCollisionMesh.visible = false;
-        }
-        return;
-    }
-    
-    if (!terrainCollisionMesh) {
-        // Create a high-resolution wireframe mesh showing the collision terrain
-        // Use same resolution as visual terrain chunks for consistency
-        const CHUNK_SIZE = 200;
-        const CHUNK_RESOLUTION = 50;
-        const VISIBLE_RADIUS = 2; // Show 2 chunks in each direction (5x5 grid)
-        
-        const geometry = new THREE.PlaneGeometry(
-            CHUNK_SIZE * (VISIBLE_RADIUS * 2 + 1),
-            CHUNK_SIZE * (VISIBLE_RADIUS * 2 + 1),
-            CHUNK_RESOLUTION * (VISIBLE_RADIUS * 2 + 1),
-            CHUNK_RESOLUTION * (VISIBLE_RADIUS * 2 + 1)
-        );
-        
-        const material = new THREE.MeshBasicMaterial({
-            color: 0x00ff00, // Green wireframe
-            wireframe: true,
-            transparent: true,
-            opacity: 0.6,
-            side: THREE.DoubleSide
-        });
-        
-        terrainCollisionMesh = new THREE.Mesh(geometry, material);
-        terrainCollisionMesh.rotation.x = -Math.PI / 2;
-        terrainCollisionMesh.name = 'terrainCollisionSurface';
-        scene.add(terrainCollisionMesh);
-    }
-    
-    terrainCollisionMesh.visible = true;
-    
-    // Update vertex positions to match collision detection terrain
-    // CRITICAL UNDERSTANDING:
-    // 1. Terrain chunks: Created at absolute world positions, then chunkGroup positioned at -noiseOffset
-    //    So a chunk vertex at absolute world (100, height, 200) appears at screen (100 - noiseOffset.x, height - noiseOffset.y, 200 - noiseOffset.z)
-    // 2. Collision detection: Hitbox at world position (x, y, z) where airplane is at (0, 0, airplaneY)
-    //    Samples terrain at absolute world coordinates (x, z) - same as terrain chunks use
-    // 3. Visualization: Should match terrain chunks exactly
-    //    Create vertices at absolute world positions, position mesh at -noiseOffset to match chunkGroup
-    
-    const CHUNK_SIZE = 200;
-    const CHUNK_RESOLUTION = 50;
-    const VISIBLE_RADIUS = 2;
-    const vertices = terrainCollisionMesh.geometry.attributes.position.array;
-    const numVerticesPerRow = CHUNK_RESOLUTION * (VISIBLE_RADIUS * 2 + 1) + 1; // 251 vertices
-    const vertexSpacing = (CHUNK_SIZE * (VISIBLE_RADIUS * 2 + 1)) / (numVerticesPerRow - 1);
-    
-    // Create vertices at absolute world positions (same coordinate system as terrain chunks)
-    // Center around the airplane's current position in world space (which is at noiseOffset)
-    const centerWorldX = noiseOffset.x;
-    const centerWorldZ = noiseOffset.z;
-    const startWorldX = centerWorldX - CHUNK_SIZE * VISIBLE_RADIUS;
-    const startWorldZ = centerWorldZ - CHUNK_SIZE * VISIBLE_RADIUS;
-    
-    let vertexIndex = 0;
-    for (let row = 0; row < numVerticesPerRow; row++) {
-        for (let col = 0; col < numVerticesPerRow; col++) {
-            const i = vertexIndex * 3;
-            
-            // Absolute world position (same coordinate system as terrain chunks)
-            const absoluteWorldX = startWorldX + col * vertexSpacing;
-            const absoluteWorldZ = startWorldZ + row * vertexSpacing;
-            
-            // Sample terrain at absolute world coordinates (same as terrain chunks and collision detection)
-            const height = calculateTerrainHeight(absoluteWorldX, absoluteWorldZ, { x: 0, z: 0 });
-            
-            // Store as local position (mesh will be positioned at -noiseOffset to match chunkGroup)
-            // So local position = absolute world position + noiseOffset (to cancel out the -noiseOffset positioning)
-            vertices[i] = absoluteWorldX + noiseOffset.x;     // X in local space
-            vertices[i + 1] = absoluteWorldZ + noiseOffset.z; // Z in local space (will be rotated)
-            vertices[i + 2] = height;                          // Y coordinate in plane geometry
-            vertexIndex++;
-        }
-    }
-    
-    terrainCollisionMesh.geometry.attributes.position.needsUpdate = true;
-    terrainCollisionMesh.geometry.computeVertexNormals();
-    
-    // Position mesh to match chunk group position (so it moves with terrain)
-    // chunkGroup is positioned at -noiseOffset, so we match that
-    const chunkGroup = scene.getObjectByName('terrainChunks');
-    if (chunkGroup) {
-        terrainCollisionMesh.position.copy(chunkGroup.position);
-    } else {
-        // Fallback: position at -noiseOffset directly
-        terrainCollisionMesh.position.set(-noiseOffset.x, -noiseOffset.y, -noiseOffset.z);
-    }
-}
-
-function toggleTerrainCollisionSurface() {
-    showTerrainCollisionSurface = !showTerrainCollisionSurface;
-    
-    if (terrainCollisionMesh) {
-        terrainCollisionMesh.visible = showTerrainCollisionSurface;
-    }
-}
 
 //===============================================
 // Menu Setup
@@ -623,33 +435,6 @@ function setupMenu(controls) {
         event.stopPropagation();
     });
 
-    // Collision markers toggle
-    const toggleCollisionMarkersBtn = document.getElementById('toggleCollisionMarkers');
-    
-    toggleCollisionMarkersBtn.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleCollisionMarkers();
-    });
-    
-    toggleCollisionMarkersBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-    });
-
-    // Terrain collision surface toggle
-    const toggleTerrainCollisionSurfaceBtn = document.getElementById('toggleTerrainCollisionSurface');
-    
-    toggleTerrainCollisionSurfaceBtn.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleTerrainCollisionSurface();
-    });
-    
-    toggleTerrainCollisionSurfaceBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-    });
 
     // Prevent clicks on menu from propagating to controls
     menu.addEventListener('mousedown', (event) => {
@@ -685,121 +470,9 @@ function animate() {
 
     // Handle restart on ANY key press when dead (only when isExploded is true)
     if (anyKeyPressed && isExploded) {
-        // Restart game - reset everything to initial state
-        isExploded = false;
-        resetExplosion();
-        clearExplosion(scene);
-        clearTrail(scene);
-        
-        // Reset noise offset FIRST (before terrain reset)
-        noiseOffset.x = 0;
-        noiseOffset.z = 0;
-        // Don't reset noiseOffset.y yet - we'll set it to safe spawn height below
-        
-        // Reset terrain chunks to origin
-        resetTerrainChunks();
-        
-        // Update chunk edges position after terrain reset
-        updateChunkEdgesPosition();
-        
-        // Reset clouds to origin
-        resetClouds(scene);
-        
-        // Reset airplane position and state
-        const airplane = scene.getObjectByName('airplane');
-        if (airplane) {
-            // CRITICAL: The airplane is always at world position (0, 0, 0) after updateTerrain
-            // Vertical position is tracked by noiseOffset.y
-            // Terrain chunks are positioned at -noiseOffset, so terrain at absolute height H appears at world (H - noiseOffset.y)
-            // To spawn safely above terrain, we need to set noiseOffset.y to a safe height
-            
-            // Calculate terrain height at spawn location (absolute world 0, 0)
-            const terrainAtSpawn = calculateTerrainHeight(0, 0, { x: 0, z: 0 });
-            const SAFE_SPAWN_HEIGHT = 250; // Desired clearance above terrain
-            const SAFE_NOISE_OFFSET_Y = terrainAtSpawn + SAFE_SPAWN_HEIGHT;
-            
-            // Set noiseOffset.y to spawn height (this is the airplane's "virtual" Y position)
-            noiseOffset.y = SAFE_NOISE_OFFSET_Y;
-            
-            // Reset airplane position to origin (updateTerrain will also do this, but set it explicitly)
-            airplane.position.set(0, 0, 0);
-            
-            console.log('Restarted: terrain height =', terrainAtSpawn.toFixed(2), 'noiseOffset.y =', SAFE_NOISE_OFFSET_Y.toFixed(2), 'clearance =', SAFE_SPAWN_HEIGHT);
-            
-            // Reset rotations
-            setCurrentRoll(0);
-            setCurrentPitch(0);
-            setCurrentYaw(0);
-            applyRotations(airplane, 0, 0, 0);
-            
-            // Make plane visible again (but preserve hitbox and light cone transparency)
-            const bodyHitbox = airplane.getObjectByName('bodyHitbox');
-            const wingHitbox = airplane.getObjectByName('wingHitbox');
-            const lightCone = airplane.getObjectByName('lightCone');
-            
-            // Restore hitbox visibility and transparency
-            if (bodyHitbox) {
-                bodyHitbox.visible = isHitboxVisible;
-                if (bodyHitbox.material) {
-                    bodyHitbox.material.transparent = true;
-                    bodyHitbox.material.opacity = 0.3;
-                }
-            }
-            if (wingHitbox) {
-                wingHitbox.visible = isHitboxVisible;
-                if (wingHitbox.material) {
-                    wingHitbox.material.transparent = true;
-                    wingHitbox.material.opacity = 0.3;
-                }
-            }
-            
-            // Restore light cone visibility and transparency (visible by default)
-            if (lightCone) {
-                lightCone.visible = true; // Visible by default along with spotlight
-                if (lightCone.material) {
-                    lightCone.material.transparent = true;
-                    lightCone.material.opacity = 0.08;
-                }
-            }
-            
-            // Restore spotlight visibility (visible by default)
-            const lights = scene.userData.lights;
-            if (lights && lights.spotlight) {
-                lights.spotlight.visible = true;
-            }
-            
-            // Make regular airplane meshes visible and opaque
-            airplane.traverse((child) => {
-                if (child.isMesh) {
-                    // Skip hitboxes and light cone - already handled above
-                    if (child === bodyHitbox || child === wingHitbox || child === lightCone) {
-                        return;
-                    }
-                    
-                    child.visible = true;
-                    if (child.material) {
-                        child.material.opacity = 1.0;
-                        child.material.transparent = false;
-                    }
-                }
-            });
-            
-            // Double-check terrain height after reset
-            const checkTerrainHeight = calculateTerrainHeight(0, 0, { x: 0, z: 0 });
-            console.log('After reset - Terrain at (0,0):', checkTerrainHeight, 'Plane Y:', airplane.position.y);
-        }
-        
-        // Reset all key states to prevent other functions from triggering
-        keyStates.w = false;
-        keyStates.a = false;
-        keyStates.s = false;
-        keyStates.d = false;
-        keyStates.f = false;
-        keyStates.space = false;
-        keyStates.arrowUp = false;
-        keyStates.arrowDown = false;
-        keyStates.arrowLeft = false;
-        keyStates.arrowRight = false;
+        // Reload page to fully regenerate everything
+        location.reload();
+        return;
     }
     
     // Reset anyKeyPressed flag after checking (consumes the key press)
@@ -842,9 +515,6 @@ function animate() {
         
         // Update chunk edges position if visible
         updateChunkEdgesPosition();
-        
-        // Update terrain collision surface visualization
-        updateTerrainCollisionSurface(noiseOffset);
         
         // Collision detection using hitboxes - check multiple points on the plane
         // Airplane is always at world position (0, 0, airplane.position.y)
@@ -1002,23 +672,20 @@ function animate() {
             console.log(`[Debug] Body hitbox: world(${centerX.toFixed(1)}, ${centerZ.toFixed(1)}) abs(${absX.toFixed(1)}, ${absZ.toFixed(1)}) terrain=${terrainAtCenter.toFixed(1)} hitboxBottom=${bodyAABB.min.y.toFixed(1)} distance=${distance.toFixed(2)}`);
         }
         
-        // Visualize collision points if enabled (show continuously, not just on collision)
-        if (showCollisionMarkers && hitboxPoints.length > 0) {
-            visualizeCollisionPoints(hitboxPoints, terrainX, terrainZ);
-        } else if (showCollisionMarkers && hitboxPoints.length === 0 && collisionMarkersGroup) {
-            // Clear markers when no collisions
-            while (collisionMarkersGroup.children.length > 0) {
-                const child = collisionMarkersGroup.children[0];
-                child.geometry.dispose();
-                child.material.dispose();
-                collisionMarkersGroup.remove(child);
-            }
-        }
-        
         if (collisionDetected && !isExploded) {
             // Trigger explosion
             isExploded = true;
             createExplosion(scene, 0, airplane.position.y, 0);
+            
+            // Fade out trail
+            fadeOutTrail();
+            
+            // Turn off spotlight
+            const lights = scene.userData.lights;
+            if (lights && lights.spotlight) {
+                lights.spotlight.visible = false;
+                lights.spotlight.intensity = 0;
+            }
             
             // Make plane disappear (fade out)
             airplane.traverse((child) => {
@@ -1028,6 +695,11 @@ function animate() {
                     child.visible = false;
                 }
             });
+        }
+        
+        // Update trail even when exploded (so it can fade out)
+        if (isExploded) {
+            updateTrail(scene, airplane, noiseOffset);
         }
         
         if (!isExploded) {

@@ -7,6 +7,9 @@ import { createNoise2D } from 'https://cdn.skypack.dev/simplex-noise';
 /** @type {Array<THREE.Mesh>} */ let trailParticles = [];  // Array to track active trail particles
 /** @type {number} */ let lastSpawnTime = 0;    // Track last spawn time
 /** @type {Object} */ let lastNoiseOffset = { x: 0, z: 0 };  // Track last offset for smooth movement
+/** @type {boolean} */ let isFadingOut = false;  // Track if trail is fading out
+/** @type {number} */ let fadeOutStartTime = 0;  // When fade-out started
+const FADE_OUT_DURATION = 1000;  // How long to fade out (ms)
 
 // Constants and Configuration
 const TRAIL_CONFIG = {
@@ -74,6 +77,16 @@ export function updateTrail(scene, airplane, noiseOffset) {
     if (!airplane) return;
 
     const currentTime = Date.now();
+    
+    // Debug: log if we're updating trail while fading out
+    if (isFadingOut && trailParticles.length > 0) {
+        const fadeOutAge = currentTime - fadeOutStartTime;
+        if (Math.floor(fadeOutAge / 500) !== Math.floor((fadeOutAge - 16) / 500)) {
+            const firstParticle = trailParticles[trailParticles.length - 1];
+            const opacity = firstParticle ? firstParticle.material.opacity : 'N/A';
+            console.log(`[Trail Update] Fading out: age=${fadeOutAge.toFixed(0)}ms, particles=${trailParticles.length}, firstOpacity=${opacity}`);
+        }
+    }
 
     // Calculate the change in offset
     const deltaX = noiseOffset.x - lastNoiseOffset.x;
@@ -83,9 +96,11 @@ export function updateTrail(scene, airplane, noiseOffset) {
     lastNoiseOffset.z = noiseOffset.z;
     lastNoiseOffset.y = noiseOffset.y || 0;
 
-    // Spawn new particle if enough time has passed
-    if (currentTime - lastSpawnTime > TRAIL_CONFIG.SPAWN_INTERVAL && 
-        trailParticles.length < TRAIL_CONFIG.MAX_PARTICLES) {
+    // Don't spawn new particles if fading out
+    if (!isFadingOut) {
+        // Spawn new particle if enough time has passed
+        if (currentTime - lastSpawnTime > TRAIL_CONFIG.SPAWN_INTERVAL && 
+            trailParticles.length < TRAIL_CONFIG.MAX_PARTICLES) {
         
         // Get airplane's position and rotation
         const airplanePos = new THREE.Vector3();
@@ -110,36 +125,80 @@ export function updateTrail(scene, airplane, noiseOffset) {
             spawnPos.z
         );
         
-        scene.add(particle);
-        trailParticles.push(particle);
-        lastSpawnTime = currentTime;
+            scene.add(particle);
+            trailParticles.push(particle);
+            lastSpawnTime = currentTime;
+        }
     }
 
-    // Update existing particles
-    trailParticles.forEach((particle, index) => {
+    // Update existing particles (iterate backwards to safely remove items)
+    for (let index = trailParticles.length - 1; index >= 0; index--) {
+        const particle = trailParticles[index];
+        
+        // Calculate age and lifetime ratio (works for both normal and fade-out)
+        const age = currentTime - particle.userData.createdAt;
+        const lifetimeRatio = age / TRAIL_CONFIG.LIFETIME;
+        
+        // Use the same fade logic that works when flying
+        // When isFadingOut is true, particles have been set to start at FADE_START
+        // so they immediately begin fading using the normal lifetime fade
+        if (lifetimeRatio > TRAIL_CONFIG.FADE_START) {
+            const newOpacity = 0.8 * (1 - lifetimeRatio) / (1 - TRAIL_CONFIG.FADE_START);
+            particle.material.opacity = newOpacity;
+            particle.material.transparent = true;
+            
+            // Debug: log first particle's fade progress
+            if (isFadingOut && index === trailParticles.length - 1 && Math.floor(age / 200) !== Math.floor((age - 16) / 200)) {
+                console.log(`Trail fading: age=${age.toFixed(0)}, ratio=${lifetimeRatio.toFixed(3)}, opacity=${newOpacity.toFixed(3)}`);
+            }
+        }
+        
+        // Remove old particles based on normal lifetime
+        if (age > TRAIL_CONFIG.LIFETIME) {
+            scene.remove(particle);
+            trailParticles.splice(index, 1);
+            continue; // Skip movement updates for removed particles
+        }
+        
         // Move particles in sync with terrain chunk group (same as clouds)
+        // This happens regardless of fade-out state, but movement may be zero when crashed
         // Chunk group moves at -noiseOffset, so particles should move at -deltaX, -deltaZ, -deltaY
         particle.position.x -= deltaX;  // Same as clouds
         particle.position.z -= deltaZ;  // Same as clouds
         particle.position.y -= deltaY;   // Same as clouds
+    }
+}
 
+// Start fading out the trail (called when plane crashes)
+// Uses the same lifetime-based fade mechanism that works when flying
+export function fadeOutTrail() {
+    if (trailParticles.length === 0) {
+        console.log('No trail particles to fade out');
+        return;
+    }
+    isFadingOut = true;
+    const currentTime = Date.now();
+    
+    // Set all particles to be at FADE_START (70% of lifetime) so they immediately start fading
+    // This uses the same fade mechanism that works when flying
+    trailParticles.forEach(particle => {
+        // Set the particle's "createdAt" time so it's already at FADE_START
+        // This makes it immediately start fading using the normal fade logic
+        const targetAge = TRAIL_CONFIG.LIFETIME * TRAIL_CONFIG.FADE_START;
+        particle.userData.createdAt = currentTime - targetAge;
+        
+        // Debug: verify the setup
         const age = currentTime - particle.userData.createdAt;
         const lifetimeRatio = age / TRAIL_CONFIG.LIFETIME;
-
-        // Fade out
-        if (lifetimeRatio > TRAIL_CONFIG.FADE_START) {
-            particle.material.opacity = 0.8 * (1 - lifetimeRatio) / (1 - TRAIL_CONFIG.FADE_START);
-        }
-
-        // Remove old particles
-        if (age > TRAIL_CONFIG.LIFETIME) {
-            scene.remove(particle);
-            trailParticles.splice(index, 1);
-        }
+        console.log(`Particle fade setup: age=${age.toFixed(0)}, ratio=${lifetimeRatio.toFixed(3)}, should fade=${lifetimeRatio > TRAIL_CONFIG.FADE_START}`);
     });
+    
+    console.log(`Fading out ${trailParticles.length} trail particles using lifetime fade`);
 }
 
 export function clearTrail(scene) {
     trailParticles.forEach(particle => scene.remove(particle));
     trailParticles = [];
+    isFadingOut = false;
+    fadeOutStartTime = 0;
 } 
