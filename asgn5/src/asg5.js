@@ -675,7 +675,8 @@ function animate() {
         if (collisionDetected && !isExploded) {
             // Trigger explosion
             isExploded = true;
-            createExplosion(scene, 0, airplane.position.y, 0);
+            // Create explosion lower (below plane center) for more grounded effect
+            createExplosion(scene, 0, airplane.position.y - 0.5, 0);
             
             // Fade out trail
             fadeOutTrail();
@@ -709,6 +710,56 @@ function animate() {
 
         // Update camera position based on lock state
         updateCameraPosition(airplane);
+        
+        // Adaptive pixelation based on camera distance to terrain
+        // When close to terrain, reduce pixel size for more detail
+        // When far, increase pixel size for better performance and retro look
+        if (pixelPass) {
+            // Get camera position in world space
+            const cameraWorldPos = camera.position.clone();
+            
+            // Calculate terrain height at camera's X/Z position
+            // Camera is in world space, terrain is at -noiseOffset, so we need to convert
+            const cameraAbsoluteX = cameraWorldPos.x + noiseOffset.x;
+            const cameraAbsoluteZ = cameraWorldPos.z + noiseOffset.z;
+            const terrainHeightAtCamera = calculateTerrainHeight(cameraAbsoluteX, cameraAbsoluteZ, { x: 0, z: 0 });
+            const terrainSurfaceY = terrainHeightAtCamera - (noiseOffset.y || 0);
+            
+            // Calculate distance from camera to terrain surface
+            const distanceToTerrain = Math.abs(cameraWorldPos.y - terrainSurfaceY);
+            
+            // Adaptive pixel size: smaller when close, larger when far
+            // Clamp between 1 (very close, high detail) and 8 (far, retro look)
+            // Use logarithmic scaling for smooth transitions
+            const minPixelSize = 1;
+            const maxPixelSize = 8;
+            const minDistance = 10;   // Very close - reduced from 5 for more noticeable effect
+            const maxDistance = 150;  // Far away - reduced from 200 for more noticeable effect
+            
+            let adaptivePixelSize;
+            if (distanceToTerrain < minDistance) {
+                adaptivePixelSize = minPixelSize;
+            } else if (distanceToTerrain > maxDistance) {
+                adaptivePixelSize = maxPixelSize;
+            } else {
+                // Logarithmic interpolation for smooth transition
+                const t = (distanceToTerrain - minDistance) / (maxDistance - minDistance);
+                const logT = Math.log(1 + t * (Math.E - 1)); // Map 0-1 to log scale
+                adaptivePixelSize = minPixelSize + (maxPixelSize - minPixelSize) * logT;
+            }
+            
+            // Update pixel size (only if changed significantly to avoid constant updates)
+            const currentPixelSize = pixelPass.pixelSize || g_pixelSize;
+            const newPixelSize = Math.round(adaptivePixelSize);
+            if (Math.abs(currentPixelSize - newPixelSize) > 0.1) {
+                pixelPass.pixelSize = newPixelSize;
+                
+                // Debug logging every 60 frames (about once per second) to verify it's working
+                if (frameCount % 60 === 0) {
+                    console.log(`Adaptive pixelation: distance=${distanceToTerrain.toFixed(1)}, pixelSize=${newPixelSize}`);
+                }
+            }
+        }
     }
     
     // Update explosion particles
