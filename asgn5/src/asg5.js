@@ -188,16 +188,25 @@ function main() {
 
     // Load the airplane model
     loadAirplane(scene, camera, controls, noiseOffset, plane).then((airplane) => {
-        // Spawn at a very high fixed altitude to be absolutely safe
-        // Even if terrain calculation is off, 250 should be way above everything
-        const SAFE_SPAWN_HEIGHT = 250;
-        airplane.position.y = SAFE_SPAWN_HEIGHT;
+        // CRITICAL: The airplane is always at world position (0, 0, 0) after updateTerrain
+        // Vertical position is tracked by noiseOffset.y
+        // Terrain chunks are positioned at -noiseOffset, so terrain at absolute height H appears at world (H - noiseOffset.y)
+        // To spawn safely above terrain, we need to set noiseOffset.y to a safe height
         
-        // Verify terrain height at spawn location for debugging
+        // Calculate terrain height at spawn location (absolute world 0, 0)
         const terrainAtSpawn = calculateTerrainHeight(0, 0, { x: 0, z: 0 });
-        console.log('Spawned at height:', SAFE_SPAWN_HEIGHT, 'Terrain at (0,0):', terrainAtSpawn, 'Clearance:', SAFE_SPAWN_HEIGHT - terrainAtSpawn);
+        const SAFE_SPAWN_HEIGHT = 31.25; // Desired clearance above terrain (250 / 8)
+        const SAFE_NOISE_OFFSET_Y = terrainAtSpawn + SAFE_SPAWN_HEIGHT;
         
-        // Store spawn height
+        // Set noiseOffset.y to spawn height (this is the airplane's "virtual" Y position)
+        noiseOffset.y = SAFE_NOISE_OFFSET_Y;
+        
+        // Airplane position will be set to (0, 0, 0) by updateTerrain, but that's fine
+        // The actual vertical position is noiseOffset.y
+        
+        console.log('Spawned: terrain height =', terrainAtSpawn.toFixed(2), 'noiseOffset.y =', SAFE_NOISE_OFFSET_Y.toFixed(2), 'clearance =', SAFE_SPAWN_HEIGHT);
+        
+        // Store spawn height for reference
         airplane.userData.spawnHeight = SAFE_SPAWN_HEIGHT;
     });
 
@@ -685,7 +694,7 @@ function animate() {
         // Reset noise offset FIRST (before terrain reset)
         noiseOffset.x = 0;
         noiseOffset.z = 0;
-        noiseOffset.y = 0;
+        // Don't reset noiseOffset.y yet - we'll set it to safe spawn height below
         
         // Reset terrain chunks to origin
         resetTerrainChunks();
@@ -699,17 +708,23 @@ function animate() {
         // Reset airplane position and state
         const airplane = scene.getObjectByName('airplane');
         if (airplane) {
-            // Spawn at fixed safe altitude (same as initial spawn)
-            const SAFE_SPAWN_HEIGHT = 250;
-            airplane.position.y = SAFE_SPAWN_HEIGHT;
+            // CRITICAL: The airplane is always at world position (0, 0, 0) after updateTerrain
+            // Vertical position is tracked by noiseOffset.y
+            // Terrain chunks are positioned at -noiseOffset, so terrain at absolute height H appears at world (H - noiseOffset.y)
+            // To spawn safely above terrain, we need to set noiseOffset.y to a safe height
             
-            // Reset airplane position to origin
-            airplane.position.x = 0;
-            airplane.position.z = 0;
-            
-            // Verify terrain height for debugging
+            // Calculate terrain height at spawn location (absolute world 0, 0)
             const terrainAtSpawn = calculateTerrainHeight(0, 0, { x: 0, z: 0 });
-            console.log('Restarted at height:', SAFE_SPAWN_HEIGHT, 'Terrain at (0,0):', terrainAtSpawn, 'Clearance:', SAFE_SPAWN_HEIGHT - terrainAtSpawn);
+            const SAFE_SPAWN_HEIGHT = 250; // Desired clearance above terrain
+            const SAFE_NOISE_OFFSET_Y = terrainAtSpawn + SAFE_SPAWN_HEIGHT;
+            
+            // Set noiseOffset.y to spawn height (this is the airplane's "virtual" Y position)
+            noiseOffset.y = SAFE_NOISE_OFFSET_Y;
+            
+            // Reset airplane position to origin (updateTerrain will also do this, but set it explicitly)
+            airplane.position.set(0, 0, 0);
+            
+            console.log('Restarted: terrain height =', terrainAtSpawn.toFixed(2), 'noiseOffset.y =', SAFE_NOISE_OFFSET_Y.toFixed(2), 'clearance =', SAFE_SPAWN_HEIGHT);
             
             // Reset rotations
             setCurrentRoll(0);
