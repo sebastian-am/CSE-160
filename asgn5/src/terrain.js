@@ -56,16 +56,19 @@ function setColorInArray(colors, index, color) {
 
 // Helper function to calculate terrain height using noise
 // x and z should be absolute world coordinates for seamless chunk alignment
-function calculateTerrainHeight(x, z, worldOffset) {
+export function calculateTerrainHeight(x, z, worldOffset) {
     // Use absolute world coordinates directly (worldOffset should be {x:0, z:0} when called with world coords)
     const worldX = x + (worldOffset.x || 0);
     const worldZ = z + (worldOffset.z || 0);
     
     // Sample noise at exact world position for seamless chunk edges
-    const noise1 = noise2D(worldX * DISTANCE_SCALE, worldZ * DISTANCE_SCALE) * HEIGHT_SCALE;
-    const noise2 = noise2D(worldX * NOISE_SCALE, worldZ * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
-    const noise3 = noise2D(worldX * NOISE_SCALE * 2, worldZ * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
-    const noise4 = noise2D(worldX * NOISE_SCALE * 4, worldZ * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
+    // Add noise offset to shift pattern away from origin
+    const noiseX = (worldX + NOISE_OFFSET_X) * DISTANCE_SCALE;
+    const noiseZ = (worldZ + NOISE_OFFSET_Z) * DISTANCE_SCALE;
+    const noise1 = noise2D(noiseX, noiseZ) * HEIGHT_SCALE;
+    const noise2 = noise2D((worldX + NOISE_OFFSET_X) * NOISE_SCALE, (worldZ + NOISE_OFFSET_Z) * NOISE_SCALE) * (HEIGHT_SCALE * 0.4);
+    const noise3 = noise2D((worldX + NOISE_OFFSET_X) * NOISE_SCALE * 2, (worldZ + NOISE_OFFSET_Z) * NOISE_SCALE * 2) * (HEIGHT_SCALE * 0.2);
+    const noise4 = noise2D((worldX + NOISE_OFFSET_X) * NOISE_SCALE * 4, (worldZ + NOISE_OFFSET_Z) * NOISE_SCALE * 4) * (HEIGHT_SCALE * 0.1);
 
     let baseHeight = noise1 + noise2 + noise3 + noise4;
     
@@ -77,8 +80,79 @@ function calculateTerrainHeight(x, z, worldOffset) {
     return baseHeight;
 }
 
+// Get maximum terrain height around a position (for spawn height calculation)
+// Uses max instead of average to ensure we spawn above any nearby peaks
+export function getMaxTerrainHeight(x, z, sampleRadius = 100, sampleCount = 100) {
+    let maxHeight = -Infinity;
+    
+    // Sample in a dense grid pattern around the position
+    const step = (sampleRadius * 2) / Math.sqrt(sampleCount);
+    const start = -sampleRadius;
+    
+    for (let offsetX = start; offsetX <= sampleRadius; offsetX += step) {
+        for (let offsetZ = start; offsetZ <= sampleRadius; offsetZ += step) {
+            const sampleX = x + offsetX;
+            const sampleZ = z + offsetZ;
+            const height = calculateTerrainHeight(sampleX, sampleZ, { x: 0, z: 0 });
+            maxHeight = Math.max(maxHeight, height);
+        }
+    }
+    
+    return maxHeight;
+}
+
+// Find a safe spawn location with relatively flat terrain
+export function findSafeSpawnLocation(centerX = 0, centerZ = 0, searchRadius = 200, stepSize = 20) {
+    let bestX = centerX;
+    let bestZ = centerZ;
+    let minMaxHeight = Infinity;
+    
+    // Search in a grid pattern for the flattest area
+    for (let x = centerX - searchRadius; x <= centerX + searchRadius; x += stepSize) {
+        for (let z = centerZ - searchRadius; z <= centerZ + searchRadius; z += stepSize) {
+            // Check max height in a small area around this point
+            const localMaxHeight = getMaxTerrainHeight(x, z, 30, 25);
+            
+            // Prefer lower, flatter areas
+            if (localMaxHeight < minMaxHeight) {
+                minMaxHeight = localMaxHeight;
+                bestX = x;
+                bestZ = z;
+            }
+        }
+    }
+    
+    return { x: bestX, z: bestZ, height: minMaxHeight };
+}
+
+// Get average terrain height around a position (for spawn height calculation)
+export function getAverageTerrainHeight(x, z, sampleRadius = 10, sampleCount = 9) {
+    let totalHeight = 0;
+    let count = 0;
+    
+    // Sample in a grid pattern around the position
+    const step = (sampleRadius * 2) / Math.sqrt(sampleCount);
+    const start = -sampleRadius;
+    
+    for (let offsetX = start; offsetX <= sampleRadius; offsetX += step) {
+        for (let offsetZ = start; offsetZ <= sampleRadius; offsetZ += step) {
+            const sampleX = x + offsetX;
+            const sampleZ = z + offsetZ;
+            totalHeight += calculateTerrainHeight(sampleX, sampleZ, { x: 0, z: 0 });
+            count++;
+        }
+    }
+    
+    return totalHeight / count;
+}
+
 // Create a single terrain chunk at a specific world position
 const noise2D = createNoise2D();
+
+// Noise offset to shift terrain pattern away from origin
+// This ensures (0,0) isn't always in a mountain
+const NOISE_OFFSET_X = 1000;
+const NOISE_OFFSET_Z = 1000;
 function createTerrainChunk(chunkX, chunkZ) {
     const planeGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, CHUNK_RESOLUTION, CHUNK_RESOLUTION);
     const planeMaterial = new THREE.MeshStandardMaterial({
@@ -166,6 +240,159 @@ export function createTerrainPlane(scene, noiseOffset) {
     return { geometry: null };
 }
 
+// Chunk edge visualization
+let chunkEdgesGroup = null;
+let chunkEdgesVisible = false;
+
+export function toggleChunkEdges(scene) {
+    chunkEdgesVisible = !chunkEdgesVisible;
+    
+    if (!chunkEdgesGroup) {
+        chunkEdgesGroup = new THREE.Group();
+        chunkEdgesGroup.name = 'chunkEdges';
+        scene.add(chunkEdgesGroup);
+    }
+    
+    if (chunkEdgesVisible) {
+        updateChunkEdges();
+    } else {
+        clearChunkEdges();
+    }
+}
+
+function updateChunkEdges() {
+    if (!chunkEdgesGroup || !chunkGroup) return;
+    
+    clearChunkEdges();
+    
+    // Get all active chunks
+    const activeChunks = new Set();
+    for (const [chunkKey, chunk] of terrainChunks.entries()) {
+        activeChunks.add(chunkKey);
+        
+        const chunkX = chunk.userData.chunkX;
+        const chunkZ = chunk.userData.chunkZ;
+        const chunkCenterX = chunkX * CHUNK_SIZE;
+        const chunkCenterZ = chunkZ * CHUNK_SIZE;
+        
+        // Get chunk boundaries
+        const minX = chunkCenterX - CHUNK_SIZE / 2;
+        const maxX = chunkCenterX + CHUNK_SIZE / 2;
+        const minZ = chunkCenterZ - CHUNK_SIZE / 2;
+        const maxZ = chunkCenterZ + CHUNK_SIZE / 2;
+        
+        // Sample terrain height at edges for vertical lines
+        const edgeHeight = 100; // Height for edge lines
+        const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0xcccccc,
+            transparent: true,
+            opacity: 0.5
+        });
+        
+        // Create vertical lines at chunk corners
+        const corners = [
+            { x: minX, z: minZ },
+            { x: maxX, z: minZ },
+            { x: maxX, z: maxZ },
+            { x: minX, z: maxZ }
+        ];
+        
+        corners.forEach(corner => {
+            const terrainHeight = calculateTerrainHeight(corner.x, corner.z, { x: 0, z: 0 });
+            const lineHeight = Math.max(terrainHeight + 50, edgeHeight);
+            
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(corner.x, terrainHeight, corner.z),
+                new THREE.Vector3(corner.x, lineHeight, corner.z)
+            ]);
+            const line = new THREE.Line(geometry, lineMaterial);
+            chunkEdgesGroup.add(line);
+        });
+        
+        // Create horizontal lines at chunk boundaries (top of edge lines)
+        const topHeight = edgeHeight;
+        const boundaryLines = [
+            // Top edge
+            new THREE.Vector3(minX, topHeight, minZ),
+            new THREE.Vector3(maxX, topHeight, minZ),
+            // Right edge
+            new THREE.Vector3(maxX, topHeight, minZ),
+            new THREE.Vector3(maxX, topHeight, maxZ),
+            // Bottom edge
+            new THREE.Vector3(maxX, topHeight, maxZ),
+            new THREE.Vector3(minX, topHeight, maxZ),
+            // Left edge
+            new THREE.Vector3(minX, topHeight, maxZ),
+            new THREE.Vector3(minX, topHeight, minZ)
+        ];
+        
+        for (let i = 0; i < boundaryLines.length; i += 2) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                boundaryLines[i],
+                boundaryLines[i + 1]
+            ]);
+            const line = new THREE.Line(geometry, lineMaterial);
+            chunkEdgesGroup.add(line);
+        }
+    }
+    
+    // Update chunk edges group position to match chunk group
+    if (chunkGroup) {
+        chunkEdgesGroup.position.copy(chunkGroup.position);
+    }
+}
+
+function clearChunkEdges() {
+    if (!chunkEdgesGroup) return;
+    while (chunkEdgesGroup.children.length > 0) {
+        const child = chunkEdgesGroup.children[0];
+        child.geometry.dispose();
+        child.material.dispose();
+        chunkEdgesGroup.remove(child);
+    }
+}
+
+export function updateChunkEdgesPosition() {
+    if (chunkEdgesGroup && chunkGroup) {
+        chunkEdgesGroup.position.copy(chunkGroup.position);
+        if (chunkEdgesVisible) {
+            updateChunkEdges();
+        }
+    }
+}
+
+// Reset terrain chunks to origin (for respawn)
+export function resetTerrainChunks() {
+    // Clear all existing chunks
+    if (chunkGroup) {
+        for (const [chunkKey, chunk] of terrainChunks.entries()) {
+            chunkGroup.remove(chunk);
+            chunk.geometry.dispose();
+            chunk.material.dispose();
+        }
+        terrainChunks.clear();
+    }
+    
+    // Reset chunk tracking
+    currentChunkX = 0;
+    currentChunkZ = 0;
+    
+    // Regenerate chunks around origin
+    if (chunkGroup) {
+        const halfChunks = Math.floor(CHUNKS_LOADED / 2);
+        for (let x = -halfChunks; x <= halfChunks; x++) {
+            for (let z = -halfChunks; z <= halfChunks; z++) {
+                const chunkKey = `${x},${z}`;
+                const chunk = createTerrainChunk(x, z);
+                terrainChunks.set(chunkKey, chunk);
+                chunkGroup.add(chunk);
+            }
+        }
+        // Reset chunk group position
+        chunkGroup.position.set(0, 0, 0);
+    }
+}
+
 // Update terrain chunks based on airplane position
 export function updateTerrain(airplane, noiseOffset, plane) {
     if (!chunkGroup || !airplane) {
@@ -231,5 +458,15 @@ export function updateTerrain(airplane, noiseOffset, plane) {
                 terrainChunks.delete(chunkKey);
             }
         }
+        
+        // Update chunk edges if visible
+        if (chunkEdgesVisible) {
+            updateChunkEdges();
+        }
+    }
+    
+    // Always update chunk edges position to match chunk group movement
+    if (chunkEdgesGroup && chunkGroup) {
+        chunkEdgesGroup.position.copy(chunkGroup.position);
     }
 }

@@ -66,10 +66,49 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                         localAxesHelper.visible = false;
                         root.add(localAxesHelper);
                         
+                        // Create hitboxes for collision detection
+                        // Body hitbox (fuselage)
+                        const bodyHitboxGeometry = new THREE.BoxGeometry(0.8, 0.4, 2.0);
+                        const bodyHitboxMaterial = new THREE.MeshBasicMaterial({
+                            color: 0xff0000,
+                            transparent: true,
+                            opacity: 0.3,
+                            wireframe: false,
+                            side: THREE.DoubleSide,
+                            depthWrite: false
+                        });
+                        const bodyHitbox = new THREE.Mesh(bodyHitboxGeometry, bodyHitboxMaterial);
+                        bodyHitbox.name = 'bodyHitbox';
+                        bodyHitbox.position.set(0, 0, 0); // Center of fuselage
+                        bodyHitbox.rotation.set(-Math.PI / 12, 0, 0); // 10 degrees pitch up
+                        bodyHitbox.visible = false; // Hidden by default
+                        root.add(bodyHitbox);
+                        
+                        // Single wing hitbox covering both wings
+                        // Wings span from x=-0.6 to x=0.6, each 2 units wide, so total span is ~3.2 units
+                        const wingHitboxGeometry = new THREE.BoxGeometry(3.6, 0.6, 0.5); // width, height, depth
+                        const wingHitboxMaterial = new THREE.MeshBasicMaterial({
+                            color: 0xff0000,
+                            transparent: true,
+                            opacity: 0.3,
+                            wireframe: false,
+                            side: THREE.DoubleSide,
+                            depthWrite: false
+                        });
+                        const wingHitbox = new THREE.Mesh(wingHitboxGeometry, wingHitboxMaterial);
+                        wingHitbox.name = 'wingHitbox';
+                        wingHitbox.position.set(0, 0.25, 0.4); // Centered, slightly forward
+                        wingHitbox.rotation.set(-Math.PI / 12, 0, 0); // Same pitch as body
+                        wingHitbox.visible = false;
+                        root.add(wingHitbox);
+                        
                         const lights = scene.userData.lights; // Attach spotlight to airplane
                         if (lights && lights.spotlight && lights.spotTarget) {
                             lights.spotlight.position.set(0, 0.25, 1.25);
                             lights.spotTarget.position.set(0, 0.25, 15);
+                            
+                            // Ensure spotlight is visible by default
+                            lights.spotlight.visible = true;
                             
                             // Add spotlight and target to the airplane
                             root.add(lights.spotlight);
@@ -87,6 +126,7 @@ function loadAirplane(scene, camera, controls, noiseOffset, terrainPlane) {
                             lightCone.name = 'lightCone';
                             lightCone.rotation.x = -Math.PI / 2;
                             lightCone.position.set(0, 0.25, 11);
+                            lightCone.visible = true; // Visible by default along with spotlight
                             root.add(lightCone);
                         }
 
@@ -191,8 +231,9 @@ function applyRotations(root, currentRoll, currentPitch, currentYaw) {
 
 function handleFlashlight(root, keys, lights) {
     if (keys.f) {
+        // Only toggle if this is the first frame the key is pressed
         if (!keys.fPressed) {
-            keys.fPressed = true;
+            keys.fPressed = true;  // Mark as pressed
             if (lights && lights.spotlight) {
                 lights.spotlight.visible = !lights.spotlight.visible;
                 // Find the light cone in the scene
@@ -202,7 +243,9 @@ function handleFlashlight(root, keys, lights) {
                 }
             }
         }
+        // Keep fPressed true while key is held
     } else {
+        // Key is released, reset the pressed flag
         keys.fPressed = false;
     }
 }

@@ -178,4 +178,32 @@ export function initializeClouds(scene) {
             clouds.push(cloud);
         }
     }
+}
+
+// Reset clouds to origin (for respawn)
+export function resetClouds(scene) {
+    // Remove all existing clouds
+    clouds.forEach(cloud => {
+        scene.remove(cloud);
+        // Dispose of geometries and materials
+        cloud.traverse((child) => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => mat.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+        });
+    });
+    clouds = [];
+    
+    // Reset noise offset tracking
+    lastNoiseOffset = { x: 0, z: 0, y: 0 };
+    
+    // Reinitialize clouds
+    initializeClouds(scene);
 } 
